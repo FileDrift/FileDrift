@@ -12,6 +12,7 @@ public static class ColorPresets
     [
         //                Name              Accent       TitleBar     Background (soft light tint)
         new("Pride",          "#E50000", "#004CFF", "#F4DCEA"),
+        new("Trans Rights",   "#F5ABB9", "#5BCFFB", "#FFFFFF"),
         new("African Unity",  "#1B7A34", "#C1121F", "#FBF6E6"),
         new("Sunset",         "#E2632A", "#8A2E5D", "#FFF3EA"),
         new("Desert",         "#BE7A3F", "#6E5A34", "#FAF4E8"),
