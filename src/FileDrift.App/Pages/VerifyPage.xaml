@@ -51,7 +51,8 @@
 
         <!-- Options -->
         <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,4,0,4">
-            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
+                        ToolTip="What to compare on each matched file. Quick = size only · Standard = size + last-write time · Full = size + time + content hash. Deeper is slower.">
                 <ui:TextBlock Text="Depth" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <ComboBox x:Name="DepthBox" Width="150" SelectedIndex="1" SelectionChanged="OnDepthChanged">
@@ -61,7 +62,8 @@
                 </ComboBox>
             </StackPanel>
 
-            <StackPanel x:Name="HashPanel" Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center">
+            <StackPanel x:Name="HashPanel" Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
+                        ToolTip="Hash algorithm used at Full depth. SHA256 is safest; MD5 is fastest. Only same-size files are hashed.">
                 <ui:TextBlock Text="Hash" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <ComboBox x:Name="HashBox" Width="100" SelectedIndex="2">
@@ -71,16 +73,19 @@
                 </ComboBox>
             </StackPanel>
 
-            <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center" />
+            <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center"
+                             ToolTip="Also compare each file's owner and permissions (SDDL). Slower; reads security descriptors for every matched pair." />
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
+                        ToolTip="Parallel workers for enumeration and hashing. Defaults to 50% of logical processors. Raise for fast disks, lower to limit load.">
                 <ui:TextBlock Text="Threads" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <ui:NumberBox x:Name="ThreadsBox" Width="92" Minimum="1" Maximum="64"
                               MaxDecimalPlaces="0" SpinButtonPlacementMode="Inline" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
+                        ToolTip="Comma-separated wildcard patterns to skip. * and ? are supported, matched against file name or relative path. Example: *.tmp, ~$*, logs\*">
                 <ui:TextBlock Text="Exclude" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <ui:TextBox x:Name="ExcludeBox" Width="200" PlaceholderText="*.tmp, ~$*  (comma-separated)" />

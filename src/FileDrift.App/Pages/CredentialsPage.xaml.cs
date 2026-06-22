@@ -26,14 +26,31 @@ public partial class CredentialsPage : Page
         _rows.Clear();
         try
         {
+            // Default credential lives under its own target; show it separately, not in the per-share list.
+            var defaultCred = _credentials.GetCredential(CredentialTarget.DefaultTarget);
+            if (defaultCred is not null)
+            {
+                DefaultStatusText.Text = $"Default set for user '{defaultCred.UserName}'.";
+                DefaultUserBox.Text = defaultCred.UserName;
+                ClearDefaultButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DefaultStatusText.Text = "No default credential set.";
+                ClearDefaultButton.Visibility = Visibility.Collapsed;
+            }
+
             foreach (var target in _credentials.ListTargets().OrderBy(t => t))
             {
+                if (CredentialTarget.IsDefault(target)) continue;
+
                 string user;
                 try { user = _credentials.GetCredential(target)?.UserName ?? ""; }
                 catch { user = "(unreadable)"; }
                 _rows.Add(new CredRow(CredentialTarget.Display(target), user, target));
             }
-            StatusText.Text = $"{_rows.Count} saved credential(s).";
+
+            StatusText.Text = $"{_rows.Count} per-share credential(s).";
         }
         catch (Exception ex)
         {
@@ -41,11 +58,48 @@ public partial class CredentialsPage : Page
         }
     }
 
+    private void OnSaveDefault(object sender, RoutedEventArgs e)
+    {
+        var user = DefaultUserBox.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            StatusText.Text = "Enter a username for the default credential.";
+            return;
+        }
+
+        try
+        {
+            _credentials.SetCredential(CredentialTarget.DefaultTarget, new NetworkCredential(user, DefaultPassBox.Password));
+            DefaultPassBox.Password = "";
+            StatusText.Text = $"Saved default credential for '{user}'.";
+            Reload();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Save failed: {ex.Message}";
+        }
+    }
+
+    private void OnClearDefault(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _credentials.DeleteCredential(CredentialTarget.DefaultTarget);
+            DefaultUserBox.Text = "";
+            DefaultPassBox.Password = "";
+            StatusText.Text = "Default credential cleared.";
+            Reload();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Clear failed: {ex.Message}";
+        }
+    }
+
     private void OnSave(object sender, RoutedEventArgs e)
     {
         var share = ShareBox.Text?.Trim();
         var user = UserBox.Text?.Trim();
-        var password = PassBox.Password;
 
         if (string.IsNullOrWhiteSpace(share) || string.IsNullOrWhiteSpace(user))
         {
@@ -56,7 +110,7 @@ public partial class CredentialsPage : Page
         var target = CredentialTarget.For(share);
         try
         {
-            _credentials.SetCredential(target, new NetworkCredential(user, password));
+            _credentials.SetCredential(target, new NetworkCredential(user, PassBox.Password));
             PassBox.Password = "";
             StatusText.Text = $"Saved credential for {CredentialTarget.Display(target)}.";
             Reload();
@@ -71,7 +125,7 @@ public partial class CredentialsPage : Page
     {
         if (CredGrid.SelectedItem is not CredRow row)
         {
-            StatusText.Text = "Select a credential to delete.";
+            StatusText.Text = "Select a per-share credential to delete.";
             return;
         }
 

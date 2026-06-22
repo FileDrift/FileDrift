@@ -34,7 +34,7 @@ internal static class VerifyCommand
                     Depth = ParseDepth(parseResult.GetValue(depth)),
                     HashAlgorithm = ParseHash(parseResult.GetValue(hash)),
                     IncludeAcl = parseResult.GetValue(acl),
-                    Threads = parseResult.GetValue(threads) is int t && t > 0 ? t : 8,
+                    Threads = parseResult.GetValue(threads) is int t && t > 0 ? t : VerifyOptions.DefaultThreads,
                     ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                 };

@@ -18,6 +18,7 @@ public partial class VerifyPage : Page
     private readonly ICredentialStore _credentials = new WindowsCredentialStore();
     private readonly ObservableCollection<ComparisonRow> _rows = new();
     private CancellationTokenSource? _cts;
+    private bool _hasDefaultCredential;
 
     public VerifyPage()
     {
@@ -25,7 +26,7 @@ public partial class VerifyPage : Page
         _engine = new VerifyEngine(_enumerator, new SqliteRunRepository());
         _preflight = new PreflightEngine(_enumerator);
         ResultsGrid.ItemsSource = _rows;
-        ThreadsBox.Value = 8; // ensure the value paints on load (XAML Value="8" only shows on focus)
+        ThreadsBox.Value = VerifyOptions.DefaultThreads; // 50% of logical processors
         Loaded += (_, _) => RefreshCredentialCombos();
         UpdateModeReadout();
     }
@@ -34,47 +35,57 @@ public partial class VerifyPage : Page
 
     private void RefreshCredentialCombos()
     {
-        string? prevSrc = SelectedTarget(SourceCredBox);
-        string? prevDst = SelectedTarget(DestCredBox);
-
         string[] targets;
-        try { targets = _credentials.ListTargets().OrderBy(t => t).ToArray(); }
+        string? defaultLabel = null;
+        try
+        {
+            var all = _credentials.ListTargets().ToArray();
+            targets = all.Where(t => !CredentialTarget.IsDefault(t)).OrderBy(t => t).ToArray();
+            if (all.Any(CredentialTarget.IsDefault))
+            {
+                var def = _credentials.GetCredential(CredentialTarget.DefaultTarget);
+                if (def is not null) defaultLabel = $"Default ({def.UserName})";
+            }
+        }
         catch { targets = []; }
 
-        Populate(SourceCredBox, targets, prevSrc);
-        Populate(DestCredBox, targets, prevDst);
+        _hasDefaultCredential = defaultLabel is not null;
+
+        Populate(SourceCredBox, targets, defaultLabel);
+        Populate(DestCredBox, targets, defaultLabel);
 
         AutoSelectCredential(SourceCredBox, SourceBox.Text);
         AutoSelectCredential(DestCredBox, DestBox.Text);
     }
 
-    private static void Populate(ComboBox box, string[] targets, string? keepTarget)
+    private static void Populate(ComboBox box, string[] targets, string? defaultLabel)
     {
         box.Items.Clear();
         box.Items.Add(new ComboBoxItem { Content = "Current user", Tag = null });
+        if (defaultLabel is not null)
+            box.Items.Add(new ComboBoxItem { Content = defaultLabel, Tag = CredentialTarget.DefaultTarget });
         foreach (var t in targets)
             box.Items.Add(new ComboBoxItem { Content = CredentialTarget.Display(t), Tag = t });
-
         box.SelectedIndex = 0;
-        if (keepTarget is not null)
-            SelectTarget(box, keepTarget);
     }
 
     private static string? SelectedTarget(ComboBox box) =>
         (box.SelectedItem as ComboBoxItem)?.Tag as string;
 
-    private static void SelectTarget(ComboBox box, string target)
-    {
-        foreach (var item in box.Items)
-            if (item is ComboBoxItem ci && (string?)ci.Tag == target) { box.SelectedItem = ci; return; }
-    }
-
+    /// <summary>Selects the share-specific credential if one exists, else the default credential
+    /// (for UNC paths), else current user.</summary>
     private void AutoSelectCredential(ComboBox box, string? path)
     {
+        box.SelectedIndex = 0; // current user
         if (string.IsNullOrWhiteSpace(path) || !NetworkPath.IsUnc(path)) return;
+
         var target = CredentialTarget.For(path);
         foreach (var item in box.Items)
             if (item is ComboBoxItem ci && (string?)ci.Tag == target) { box.SelectedItem = ci; return; }
+
+        if (_hasDefaultCredential)
+            foreach (var item in box.Items)
+                if (item is ComboBoxItem ci && (string?)ci.Tag == CredentialTarget.DefaultTarget) { box.SelectedItem = ci; return; }
     }
 
     private NetworkCredential? ResolveCredential(ComboBox box)
@@ -127,7 +138,7 @@ public partial class VerifyPage : Page
         Depth = (VerifyDepth)Math.Max(0, DepthBox.SelectedIndex),
         HashAlgorithm = (FileDriftHashAlgorithm)Math.Max(0, HashBox.SelectedIndex),
         IncludeAcl = AclSwitch.IsChecked == true,
-        Threads = (int)(ThreadsBox.Value ?? 8),
+        Threads = (int)(ThreadsBox.Value ?? VerifyOptions.DefaultThreads),
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
     };
