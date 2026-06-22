@@ -1,6 +1,6 @@
 namespace FileDrift.Core.Models;
 
-public sealed class VerifyOptions
+public sealed record VerifyOptions
 {
     public VerifyDepth Depth { get; init; } = VerifyDepth.Standard;
     public FileDriftHashAlgorithm HashAlgorithm { get; init; } = FileDriftHashAlgorithm.SHA256;
@@ -14,4 +14,19 @@ public sealed class VerifyOptions
 
     /// <summary>Glob patterns for paths to exclude, relative to the root being scanned.</summary>
     public IReadOnlyList<string> ExcludePatterns { get; init; } = [];
+
+    /// <summary>Exact-match mode: forces Full depth, SHA-256, ACL comparison, and zero timestamp
+    /// tolerance. Any byte, permission, or timestamp difference counts as a difference.</summary>
+    public bool Strict { get; init; }
+
+    /// <summary>Applies Strict overrides, returning the options the engine should actually run with.
+    /// Non-strict options are returned unchanged.</summary>
+    public VerifyOptions AsEffective() => Strict
+        ? this with
+        {
+            Depth = VerifyDepth.Full,
+            HashAlgorithm = FileDriftHashAlgorithm.SHA256,
+            IncludeAcl = true,
+        }
+        : this;
 }

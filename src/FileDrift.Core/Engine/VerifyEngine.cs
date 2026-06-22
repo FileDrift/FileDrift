@@ -38,6 +38,9 @@ public sealed class VerifyEngine
         IProgress<VerifyProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        // Strict mode forces Full depth, SHA-256, and ACLs; persist what actually ran.
+        options = options.AsEffective();
+
         var run = new RunRecord
         {
             Id = Guid.NewGuid(),
@@ -69,9 +72,10 @@ public sealed class VerifyEngine
             if (options.Depth >= VerifyDepth.Full || options.IncludeAcl)
                 await EnrichMatchedPairsAsync(source, dest, options, progress, cancellationToken);
 
-            // Phase 4 — compare
+            // Phase 4 — compare. Strict mode uses zero timestamp tolerance (exact match).
             progress?.Report(new VerifyProgress { Phase = VerifyPhase.Comparing, Message = "Comparing trees" });
-            var comparisons = _comparison.Compare(source.Values.ToArray(), dest.Values.ToArray(), options);
+            var comparer = options.Strict ? new ComparisonEngine(TimeSpan.Zero) : _comparison;
+            var comparisons = comparer.Compare(source.Values.ToArray(), dest.Values.ToArray(), options);
 
             Tally(run, comparisons);
 

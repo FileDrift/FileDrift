@@ -39,6 +39,7 @@ internal static class ReportCommand
                         hashAlgorithm = run.Options.HashAlgorithm,
                         includeAcl = run.Options.IncludeAcl,
                         threads = run.Options.Threads,
+                        strict = run.Options.Strict,
                     },
                     summary = new
                     {

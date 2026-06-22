@@ -16,10 +16,11 @@ internal static class VerifyCommand
         var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
         var credDst = new Option<string>("--cred-dest")   { Description = "Saved credential target name for the destination share" };
         var exclude = new Option<string>("--exclude") { Description = "Comma-separated glob patterns to exclude (e.g. \"*.tmp,~$*\")" };
+        var strict  = new Option<bool>("--strict")  { Description = "Exact match: forces full depth, SHA-256, ACLs, and zero timestamp tolerance" };
         var all     = new Option<bool>("--all")     { Description = "Include matched files in the differences array (default: differences only)" };
 
         var cmd = new Command("verify", "Compare source and destination trees and report differences");
-        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, all })
+        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, all })
             cmd.Add(o);
 
         cmd.SetAction(async (parseResult, ct) =>
@@ -37,6 +38,7 @@ internal static class VerifyCommand
                     Threads = parseResult.GetValue(threads) is int t && t > 0 ? t : VerifyOptions.DefaultThreads,
                     ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                    Strict = parseResult.GetValue(strict),
                 };
 
                 var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
@@ -68,10 +70,11 @@ internal static class VerifyCommand
                     destination = run.DestPath,
                     options = new
                     {
-                        depth = options.Depth,
-                        hashAlgorithm = options.HashAlgorithm,
-                        includeAcl = options.IncludeAcl,
-                        threads = options.Threads,
+                        depth = run.Options.Depth,
+                        hashAlgorithm = run.Options.HashAlgorithm,
+                        includeAcl = run.Options.IncludeAcl,
+                        threads = run.Options.Threads,
+                        strict = run.Options.Strict,
                     },
                     summary = new
                     {

@@ -110,8 +110,30 @@ public partial class VerifyPage : Page
 
     private void OnDepthChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (HashPanel is not null)
+        if (HashPanel is not null && StrictSwitch?.IsChecked != true)
             HashPanel.IsEnabled = DepthBox.SelectedIndex == 2; // Full
+    }
+
+    private void OnStrictChanged(object sender, RoutedEventArgs e) => ApplyStrictState();
+
+    /// <summary>When Strict is on, force Full/SHA-256/ACL and disable those controls so the UI
+    /// reflects what will actually run.</summary>
+    private void ApplyStrictState()
+    {
+        if (StrictSwitch is null) return;
+        bool strict = StrictSwitch.IsChecked == true;
+
+        if (strict)
+        {
+            DepthBox.SelectedIndex = 2;  // Full
+            HashBox.SelectedIndex = 2;   // SHA256
+            AclSwitch.IsChecked = true;
+        }
+
+        DepthBox.IsEnabled = !strict;
+        AclSwitch.IsEnabled = !strict;
+        if (HashPanel is not null)
+            HashPanel.IsEnabled = !strict && DepthBox.SelectedIndex == 2;
     }
 
     private void UpdateModeReadout()
@@ -141,6 +163,7 @@ public partial class VerifyPage : Page
         Threads = (int)(ThreadsBox.Value ?? VerifyOptions.DefaultThreads),
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+        Strict = StrictSwitch.IsChecked == true,
     };
 
     // ── actions ──
@@ -283,7 +306,9 @@ public partial class VerifyPage : Page
         PreflightButton.IsEnabled = !running;
         SourceBox.IsEnabled = DestBox.IsEnabled = DepthBox.IsEnabled = HashBox.IsEnabled =
             AclSwitch.IsEnabled = ThreadsBox.IsEnabled = ExcludeBox.IsEnabled =
-            SourceCredBox.IsEnabled = DestCredBox.IsEnabled = !running;
+            StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled = !running;
+
+        if (!running) ApplyStrictState(); // restore forced/disabled controls if Strict is on
     }
 
     private static string Bytes(long? bytes) => bytes is { } b ? FormatSize(b) : "?";

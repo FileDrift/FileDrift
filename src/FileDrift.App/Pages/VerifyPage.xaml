@@ -76,6 +76,10 @@
             <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center"
                              ToolTip="Also compare each file's owner and permissions (SDDL). Slower; reads security descriptors for every matched pair." />
 
+            <ui:ToggleSwitch x:Name="StrictSwitch" Content="Strict" Margin="0,0,18,8" VerticalAlignment="Center"
+                             Checked="OnStrictChanged" Unchecked="OnStrictChanged"
+                             ToolTip="Exact match: forces Full depth, SHA-256, ACL comparison, and zero timestamp tolerance. Any byte, permission, or timestamp difference counts as a difference." />
+
             <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
                         ToolTip="Parallel workers for enumeration and hashing. Defaults to 50% of logical processors. Raise for fast disks, lower to limit load.">
                 <ui:TextBlock Text="Threads" VerticalAlignment="Center" Margin="0,0,6,0"
