@@ -1,0 +1,19 @@
+# Normalize line endings: check out CRLF on Windows, store LF in the repo.
+* text=auto eol=crlf
+
+# Source files are text.
+*.cs       text
+*.csproj   text
+*.sln      text
+*.json     text
+*.xaml     text
+*.md       text
+*.gitignore text
+*.gitattributes text
+
+# Binary assets — never touch line endings.
+*.png   binary
+*.ico   binary
+*.pfx   binary
+*.snk   binary
+*.db    binary
