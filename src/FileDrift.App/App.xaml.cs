@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using FileDrift.App.Cli;
+using FileDrift.App.Settings;
 
 namespace FileDrift.App;
 
@@ -33,7 +34,8 @@ public partial class App : Application
             return;
         }
 
-        // GUI mode.
+        // GUI mode: restore saved appearance, then show the window.
+        AppearanceApplier.Apply(SettingsStore.Load());
         var window = new MainWindow();
         window.Show();
     }

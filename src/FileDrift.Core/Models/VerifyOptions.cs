@@ -3,7 +3,10 @@ namespace FileDrift.Core.Models;
 public sealed record VerifyOptions
 {
     public VerifyDepth Depth { get; init; } = VerifyDepth.Standard;
-    public FileDriftHashAlgorithm HashAlgorithm { get; init; } = FileDriftHashAlgorithm.SHA256;
+
+    /// <summary>Default MD5 — fast and fine for drift detection. Strict mode forces SHA-256.</summary>
+    public FileDriftHashAlgorithm HashAlgorithm { get; init; } = FileDriftHashAlgorithm.MD5;
+
     public bool IncludeAcl { get; init; }
 
     /// <summary>Default parallelism: 50% of logical processors (at least 1).</summary>

@@ -26,9 +26,16 @@ public partial class VerifyPage : Page
         _engine = new VerifyEngine(_enumerator, new SqliteRunRepository());
         _preflight = new PreflightEngine(_enumerator);
         ResultsGrid.ItemsSource = _rows;
-        ThreadsBox.Value = VerifyOptions.DefaultThreads; // 50% of logical processors
-        Loaded += (_, _) => RefreshCredentialCombos();
+        Loaded += OnLoaded;
         UpdateModeReadout();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // Set NumberBox.Value here (after the template is applied) so it actually paints.
+        ThreadsBox.Value = VerifyOptions.DefaultThreads; // 50% of logical processors
+        UpdateHashVisibility();
+        RefreshCredentialCombos();
     }
 
     // ── credential combos ──
@@ -108,10 +115,15 @@ public partial class VerifyPage : Page
         UpdateModeReadout();
     }
 
-    private void OnDepthChanged(object sender, SelectionChangedEventArgs e)
+    private void OnDepthChanged(object sender, SelectionChangedEventArgs e) => UpdateHashVisibility();
+
+    /// <summary>The Hash selector only appears at Full depth, and is read-only under Strict Mode.</summary>
+    private void UpdateHashVisibility()
     {
-        if (HashPanel is not null && StrictSwitch?.IsChecked != true)
-            HashPanel.IsEnabled = DepthBox.SelectedIndex == 2; // Full
+        if (HashPanel is null) return;
+        bool full = DepthBox.SelectedIndex == 2;
+        HashPanel.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
+        HashPanel.IsEnabled = full && StrictSwitch?.IsChecked != true;
     }
 
     private void OnStrictChanged(object sender, RoutedEventArgs e) => ApplyStrictState();
@@ -132,8 +144,7 @@ public partial class VerifyPage : Page
 
         DepthBox.IsEnabled = !strict;
         AclSwitch.IsEnabled = !strict;
-        if (HashPanel is not null)
-            HashPanel.IsEnabled = !strict && DepthBox.SelectedIndex == 2;
+        UpdateHashVisibility();
     }
 
     private void UpdateModeReadout()

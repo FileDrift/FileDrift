@@ -63,10 +63,11 @@
             </StackPanel>
 
             <StackPanel x:Name="HashPanel" Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
-                        ToolTip="Hash algorithm used at Full depth. SHA256 is safest; MD5 is fastest. Only same-size files are hashed.">
+                        Visibility="Collapsed"
+                        ToolTip="Hash algorithm used at Full depth. MD5 is fastest and fine for drift detection; SHA-256 is strongest. Only same-size files are hashed.">
                 <ui:TextBlock Text="Hash" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="HashBox" Width="100" SelectedIndex="2">
+                <ComboBox x:Name="HashBox" Width="100" SelectedIndex="0">
                     <ComboBoxItem Content="MD5" />
                     <ComboBoxItem Content="SHA1" />
                     <ComboBoxItem Content="SHA256" />
@@ -76,8 +77,9 @@
             <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center"
                              ToolTip="Also compare each file's owner and permissions (SDDL). Slower; reads security descriptors for every matched pair." />
 
-            <ui:ToggleSwitch x:Name="StrictSwitch" Content="Strict" Margin="0,0,18,8" VerticalAlignment="Center"
+            <ui:ToggleSwitch x:Name="StrictSwitch" Content="Strict Mode" Margin="0,0,18,8" VerticalAlignment="Center"
                              Checked="OnStrictChanged" Unchecked="OnStrictChanged"
+                             ToolTipService.ShowOnDisabled="True" ToolTipService.InitialShowDelay="300"
                              ToolTip="Exact match: forces Full depth, SHA-256, ACL comparison, and zero timestamp tolerance. Any byte, permission, or timestamp difference counts as a difference." />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"

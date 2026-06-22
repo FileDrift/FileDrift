@@ -1,9 +1,8 @@
 using System.Reflection;
+using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using FileDrift.App.Settings;
 using FileDrift.Core.Persistence;
-using Wpf.Ui.Appearance;
-using Wpf.Ui.Controls;
 
 namespace FileDrift.App.Pages;
 
@@ -11,26 +10,23 @@ public partial class SettingsPage : Page
 {
     private bool _initializing = true;
 
-    private static readonly (string Name, Color Color)[] Accents =
-    [
-        ("Default (blue)", Color.FromRgb(0x00, 0x67, 0xC0)),
-        ("Teal",           Color.FromRgb(0x0F, 0x7B, 0x6C)),
-        ("Purple",         Color.FromRgb(0x6F, 0x5B, 0xD7)),
-        ("Magenta",        Color.FromRgb(0xC2, 0x39, 0xB3)),
-        ("Orange",         Color.FromRgb(0xCA, 0x50, 0x10)),
-        ("Green",          Color.FromRgb(0x10, 0x7C, 0x10)),
-        ("Red",            Color.FromRgb(0xC4, 0x2B, 0x1C)),
-    ];
-
     public SettingsPage()
     {
         InitializeComponent();
 
-        ThemeBox.SelectedIndex = ApplicationThemeManager.GetAppTheme() == ApplicationTheme.Dark ? 1 : 0;
+        var settings = SettingsStore.Load();
 
-        foreach (var (name, color) in Accents)
-            AccentBox.Items.Add(new ComboBoxItem { Content = name, Tag = color });
-        AccentBox.SelectedIndex = 0;
+        SchemeBox.SelectedIndex = settings.ColorScheme switch
+        {
+            "Dark" => 1,
+            "Pride" => 2,
+            _ => 0,
+        };
+
+        foreach (var (name, _) in AppearanceApplier.Accents)
+            AccentBox.Items.Add(new ComboBoxItem { Content = name });
+        SelectAccent(settings.Accent);
+        UpdateAccentAvailability();
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = version is null ? "unknown" : $"FileDrift {version.Major}.{version.Minor}.{version.Build}";
@@ -39,24 +35,41 @@ public partial class SettingsPage : Page
         _initializing = false;
     }
 
-    private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSchemeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_initializing) return;
-        var theme = ThemeBox.SelectedIndex == 1 ? ApplicationTheme.Dark : ApplicationTheme.Light;
-        ApplicationThemeManager.Apply(theme, WindowBackdropType.Mica, updateAccent: false);
-        ApplyAccent();
+        UpdateAccentAvailability();
+        ApplyAndSave();
     }
 
     private void OnAccentChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_initializing) return;
-        ApplyAccent();
+        ApplyAndSave();
     }
 
-    private void ApplyAccent()
+    private void UpdateAccentAvailability()
     {
-        if (AccentBox.SelectedItem is not ComboBoxItem { Tag: Color color }) return;
-        var theme = ApplicationThemeManager.GetAppTheme();
-        ApplicationAccentColorManager.Apply(color, theme, systemGlassColor: false, systemAccentColor: false);
+        // Pride supplies its own colors, so the accent picker doesn't apply there.
+        AccentCard.IsEnabled = (SchemeBox.SelectedItem as ComboBoxItem)?.Content as string != "Pride";
+    }
+
+    private void ApplyAndSave()
+    {
+        var settings = new AppSettings
+        {
+            ColorScheme = (SchemeBox.SelectedItem as ComboBoxItem)?.Content as string ?? "Light",
+            Accent = (AccentBox.SelectedItem as ComboBoxItem)?.Content as string ?? "Default (blue)",
+        };
+
+        AppearanceApplier.Apply(settings);
+        SettingsStore.Save(settings);
+    }
+
+    private void SelectAccent(string name)
+    {
+        foreach (var item in AccentBox.Items)
+            if (item is ComboBoxItem ci && (string?)ci.Content == name) { AccentBox.SelectedItem = ci; return; }
+        AccentBox.SelectedIndex = 0;
     }
 }

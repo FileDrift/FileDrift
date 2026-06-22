@@ -10,22 +10,23 @@
         <ui:CardControl Icon="{ui:SymbolIcon PaintBrush24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>
-                    <ui:TextBlock Text="Theme" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Light or dark base scheme"
+                    <ui:TextBlock Text="Color scheme" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Light, Dark, or Pride (rainbow accents). Saved between sessions."
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>
-            <ComboBox x:Name="ThemeBox" Width="150" SelectionChanged="OnThemeChanged">
+            <ComboBox x:Name="SchemeBox" Width="150" SelectionChanged="OnSchemeChanged">
                 <ComboBoxItem Content="Light" />
                 <ComboBoxItem Content="Dark" />
+                <ComboBoxItem Content="Pride" />
             </ComboBox>
         </ui:CardControl>
 
-        <ui:CardControl Icon="{ui:SymbolIcon Color24}" Margin="0,0,0,10">
+        <ui:CardControl x:Name="AccentCard" Icon="{ui:SymbolIcon Color24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>
                     <ui:TextBlock Text="Accent color" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Recolors buttons, selection, and highlights"
+                    <ui:TextBlock Text="Recolors buttons, selection, and highlights (Light/Dark only)"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>

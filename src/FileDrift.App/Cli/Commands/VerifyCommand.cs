@@ -10,7 +10,7 @@ internal static class VerifyCommand
         var src     = new Option<string>("--src")   { Description = "Source path (local or UNC)", Required = true };
         var dst     = new Option<string>("--dst")   { Description = "Destination path (local or UNC)", Required = true };
         var depth   = new Option<string>("--depth") { Description = "quick | standard | full (default: standard)" };
-        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: sha256, full depth only)" };
+        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: md5, full depth only)" };
         var acl     = new Option<bool>("--acl")     { Description = "Include ACL comparison" };
         var threads = new Option<int>("--threads")  { Description = "Parallel threads (default: 8)" };
         var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
@@ -109,9 +109,9 @@ internal static class VerifyCommand
 
     private static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch
     {
-        "md5" => FileDriftHashAlgorithm.MD5,
         "sha1" => FileDriftHashAlgorithm.SHA1,
-        null or "" or "sha256" => FileDriftHashAlgorithm.SHA256,
+        "sha256" => FileDriftHashAlgorithm.SHA256,
+        null or "" or "md5" => FileDriftHashAlgorithm.MD5,
         _ => throw new ArgumentException($"Unknown hash '{value}'. Use md5, sha1, or sha256."),
     };
 }
