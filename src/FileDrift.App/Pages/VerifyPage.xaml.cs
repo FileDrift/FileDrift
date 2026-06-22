@@ -206,6 +206,10 @@ public partial class VerifyPage : Page
         SetRunning(true);
         _rows.Clear();
         ResetSummary();
+        ClearLog();
+        AppendLog($"Starting verify ({DescribeOptions(options)})");
+        AppendLog($"Source: {src}");
+        AppendLog($"Destination: {dst}");
 
         var progress = new Progress<VerifyProgress>(OnProgress);
         try
@@ -213,9 +217,24 @@ public partial class VerifyPage : Page
             var result = await Task.Run(() => _engine.RunAsync(src, dst, options, srcCred, dstCred, progress, _cts.Token));
             ShowResult(result);
         }
-        catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; }
-        catch (Exception ex) { StatusText.Text = $"Error: {ex.GetType().Name} — {ex.Message}"; }
+        catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
+        catch (Exception ex)
+        {
+            var m = $"Error: {ex.GetType().Name} — {ex.Message}";
+            StatusText.Text = m;
+            AppendLog(m);
+        }
         finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
+    }
+
+    private static string DescribeOptions(VerifyOptions o)
+    {
+        var parts = new List<string> { o.Depth.ToString().ToLowerInvariant() };
+        if (o.Depth == VerifyDepth.Full) parts.Add(o.HashAlgorithm.ToString());
+        if (o.IncludeAcl) parts.Add("ACLs");
+        if (o.Strict) parts.Add("strict");
+        parts.Add($"{o.Threads} threads");
+        return string.Join(", ", parts);
     }
 
     private async void OnPreflightClick(object sender, RoutedEventArgs e)
@@ -234,6 +253,10 @@ public partial class VerifyPage : Page
         _cts = new CancellationTokenSource();
         SetRunning(true);
         ResetSummary();
+        ClearLog();
+        AppendLog("Starting preflight");
+        AppendLog($"Source: {src}");
+        AppendLog($"Destination: {dst}");
         var progress = new Progress<VerifyProgress>(OnProgress);
 
         try
@@ -243,14 +266,24 @@ public partial class VerifyPage : Page
             ProgressBar.Value = 100;
             MatchedText.Text = result.SourceFileCount?.ToString("N0") ?? "—";
             DifferentText.Text = result.DestFileCount?.ToString("N0") ?? "—";
-            var issues = result.Issues.Count == 0 ? "no issues" : string.Join("; ", result.Issues);
-            StatusText.Text = result.IsReady
+
+            foreach (var issue in result.Issues)
+                AppendLog(issue);
+
+            var summary = result.IsReady
                 ? $"Preflight OK — source {result.SourceFileCount:N0} files / {Bytes(result.SourceTotalBytes)}, " +
                   $"dest {result.DestFileCount:N0} files / {Bytes(result.DestTotalBytes)}."
-                : $"Preflight blocked — {issues}";
+                : $"Preflight blocked — {(result.Issues.Count == 0 ? "see issues" : string.Join("; ", result.Issues))}";
+            StatusText.Text = summary;
+            AppendLog(summary);
         }
-        catch (OperationCanceledException) { StatusText.Text = "Cancelled."; }
-        catch (Exception ex) { StatusText.Text = $"Error: {ex.GetType().Name} — {ex.Message}"; }
+        catch (OperationCanceledException) { StatusText.Text = "Cancelled."; AppendLog("Cancelled."); }
+        catch (Exception ex)
+        {
+            var m = $"Error: {ex.GetType().Name} — {ex.Message}";
+            StatusText.Text = m;
+            AppendLog(m);
+        }
         finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
@@ -274,7 +307,9 @@ public partial class VerifyPage : Page
 
     private void OnProgress(VerifyProgress p)
     {
-        StatusText.Text = p.Message ?? p.Phase.ToString();
+        var message = p.Message ?? p.Phase.ToString();
+        StatusText.Text = message;
+
         if (p.Total > 0)
         {
             ProgressBar.IsIndeterminate = false;
@@ -284,6 +319,34 @@ public partial class VerifyPage : Page
         {
             ProgressBar.IsIndeterminate = true;
         }
+
+        AppendLog(p.Phase switch
+        {
+            VerifyPhase.EnumeratingSource => $"Source · {message}",
+            VerifyPhase.EnumeratingDestination => $"Destination · {message}",
+            _ => message,
+        });
+    }
+
+    // ── activity log ──
+
+    private string? _lastLogged;
+
+    private void AppendLog(string line)
+    {
+        if (line == _lastLogged) return; // collapse consecutive duplicates
+        _lastLogged = line;
+
+        ActivityLog.Items.Add($"{DateTime.Now:HH:mm:ss}  {line}");
+        while (ActivityLog.Items.Count > 1000)
+            ActivityLog.Items.RemoveAt(0);
+        ActivityLog.ScrollIntoView(ActivityLog.Items[^1]);
+    }
+
+    private void ClearLog()
+    {
+        ActivityLog.Items.Clear();
+        _lastLogged = null;
     }
 
     private void ShowResult(VerifyResult result)
@@ -305,9 +368,11 @@ public partial class VerifyPage : Page
         }
 
         var mode = _enumerator.Source == EnumerationSource.Mft ? "MFT" : "SMB";
-        StatusText.Text =
+        var summary =
             $"Done ({mode}) — {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest files.";
+        StatusText.Text = summary;
+        AppendLog(summary);
     }
 
     private void ResetSummary()

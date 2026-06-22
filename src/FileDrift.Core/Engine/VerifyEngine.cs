@@ -132,7 +132,9 @@ public sealed class VerifyEngine
             {
                 Phase = phase,
                 Processed = p.FilesFound,
-                Message = p.CurrentDirectory is { } dir ? $"Scanning {dir}" : "Scanning",
+                Message = p.CurrentDirectory is { } dir
+                    ? $"Scanning {dir} ({p.FilesFound:N0} files)"
+                    : $"Scanning… ({p.FilesFound:N0} files)",
             }));
 
         await foreach (var record in _enumerator.EnumerateAsync(rootPath, options, enumProgress, ct))
@@ -198,7 +200,7 @@ public sealed class VerifyEngine
                     Phase = VerifyPhase.Enriching,
                     Processed = n,
                     Total = matchedPaths.Length,
-                    Message = $"{(doHash ? "Hashing" : "Reading ACLs on")} matched pairs",
+                    Message = $"{(doHash ? "Hashing" : "Reading ACLs on")} matched pairs ({n:N0}/{matchedPaths.Length:N0})",
                 });
         });
 

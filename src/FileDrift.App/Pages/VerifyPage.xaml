@@ -12,6 +12,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -103,13 +104,13 @@
         <!-- Actions + mode readout -->
         <Grid Grid.Row="3" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal">
-                <ui:Button x:Name="VerifyButton" Content="Verify" Appearance="Primary"
+                <ui:Button x:Name="PreflightButton" Content="Preflight"
+                           Icon="{ui:SymbolIcon Search24}" Click="OnPreflightClick"
+                           ToolTip="Validate access and counts before verifying — run this first" />
+                <ui:Button x:Name="VerifyButton" Content="Verify" Appearance="Primary" Margin="8,0,0,0"
                            Icon="{ui:SymbolIcon Play24}" Click="OnVerifyClick" />
                 <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0"
                            Icon="{ui:SymbolIcon Stop24}" Click="OnCancelClick" Visibility="Collapsed" />
-                <ui:Button x:Name="PreflightButton" Content="Preflight" Margin="8,0,0,0"
-                           Icon="{ui:SymbolIcon Search24}" Click="OnPreflightClick"
-                           ToolTip="Check accessibility and counts without comparing" />
             </StackPanel>
             <ui:TextBlock x:Name="ModeText" HorizontalAlignment="Right" VerticalAlignment="Center"
                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
@@ -150,8 +151,24 @@
             </Border>
         </UniformGrid>
 
+        <!-- Activity log -->
+        <Grid Grid.Row="6" Margin="0,0,0,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ui:TextBlock Grid.Row="0" Text="Activity" FontTypography="BodyStrong" FontSize="13" Margin="0,0,0,4" />
+            <Border Grid.Row="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="6">
+                <ListBox x:Name="ActivityLog" Height="120" BorderThickness="0"
+                         FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12"
+                         Background="{DynamicResource ControlFillColorDefaultBrush}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         VirtualizingStackPanel.IsVirtualizing="True" />
+            </Border>
+        </Grid>
+
         <!-- Results -->
-        <DataGrid x:Name="ResultsGrid" Grid.Row="6" AutoGenerateColumns="False" IsReadOnly="True"
+        <DataGrid x:Name="ResultsGrid" Grid.Row="7" AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
                   FontSize="12" RowHeight="26">
             <DataGrid.Columns>
