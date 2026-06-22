@@ -7,7 +7,7 @@ namespace FileDrift.App.Pages;
 
 public partial class SettingsPage : Page
 {
-    private bool _initializing = true;
+    private bool _suppress = true;
 
     public SettingsPage()
     {
@@ -15,13 +15,18 @@ public partial class SettingsPage : Page
 
         var settings = SettingsStore.Load();
 
+        PresetBox.Items.Add(new ComboBoxItem { Content = ColorPresets.Custom });
+        foreach (var preset in ColorPresets.All)
+            PresetBox.Items.Add(new ComboBoxItem { Content = preset.Name });
+        Select(PresetBox, settings.Preset);
+
         ThemeBox.SelectedIndex = string.Equals(settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         foreach (var (name, _) in AppearanceApplier.Accents)
             AccentBox.Items.Add(new ComboBoxItem { Content = name });
         Select(AccentBox, settings.Accent);
 
-        TitleBarBox.Items.Add(new ComboBoxItem { Content = AppearanceApplier.DefaultTitleBar });
+        TitleBarBox.Items.Add(new ComboBoxItem { Content = AppearanceApplier.DefaultToken });
         foreach (var (name, _) in AppearanceApplier.Accents)
             TitleBarBox.Items.Add(new ComboBoxItem { Content = name });
         Select(TitleBarBox, settings.TitleBar);
@@ -30,32 +35,65 @@ public partial class SettingsPage : Page
         VersionText.Text = version is null ? "unknown" : $"FileDrift {version.Major}.{version.Minor}.{version.Build}";
         DbPathText.Text = AppPaths.HistoryDatabase;
 
-        _initializing = false;
+        _suppress = false;
     }
 
-    private void OnThemeChanged(object sender, SelectionChangedEventArgs e) => ApplyAndSave();
-    private void OnAccentChanged(object sender, SelectionChangedEventArgs e) => ApplyAndSave();
-    private void OnTitleBarChanged(object sender, SelectionChangedEventArgs e) => ApplyAndSave();
-
-    private void ApplyAndSave()
+    private void OnPresetChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_initializing) return;
+        if (_suppress) return;
+
+        var name = SelectedText(PresetBox);
+        if (name is null || string.Equals(name, ColorPresets.Custom, StringComparison.OrdinalIgnoreCase))
+            return; // "Custom" is set implicitly by manual edits; selecting it changes nothing
+
+        if (ColorPresets.Find(name) is not { } preset) return;
 
         var settings = new AppSettings
         {
-            Theme = (ThemeBox.SelectedItem as ComboBoxItem)?.Content as string ?? "Light",
-            Accent = (AccentBox.SelectedItem as ComboBoxItem)?.Content as string ?? "Default (blue)",
-            TitleBar = (TitleBarBox.SelectedItem as ComboBoxItem)?.Content as string ?? "Default",
+            Preset = preset.Name,
+            Theme = "Light",
+            Accent = preset.Accent,
+            TitleBar = preset.TitleBar,
+            Background = preset.Background,
         };
+
+        _suppress = true;
+        ThemeBox.SelectedIndex = 0; // presets are Light
+        _suppress = false;
 
         AppearanceApplier.Apply(settings);
         SettingsStore.Save(settings);
     }
 
+    private void OnManualChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress) return;
+
+        // Any manual edit drops to Custom and clears the preset's background tint.
+        var settings = new AppSettings
+        {
+            Preset = ColorPresets.Custom,
+            Theme = SelectedText(ThemeBox) ?? "Light",
+            Accent = SelectedText(AccentBox) ?? "Default (blue)",
+            TitleBar = SelectedText(TitleBarBox) ?? "Default",
+            Background = "Default",
+        };
+
+        _suppress = true;
+        Select(PresetBox, ColorPresets.Custom);
+        _suppress = false;
+
+        AppearanceApplier.Apply(settings);
+        SettingsStore.Save(settings);
+    }
+
+    private static string? SelectedText(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Content as string;
+
     private static void Select(ComboBox box, string content)
     {
         foreach (var item in box.Items)
-            if (item is ComboBoxItem ci && (string?)ci.Content == content) { box.SelectedItem = ci; return; }
+            if (item is ComboBoxItem ci && string.Equals((string?)ci.Content, content, StringComparison.OrdinalIgnoreCase))
+            { box.SelectedItem = ci; return; }
         box.SelectedIndex = 0;
     }
 }

@@ -11,7 +11,7 @@ public partial class MainWindow : FluentWindow
         Loaded += (_, _) =>
         {
             RootNavigation.Navigate(typeof(Pages.VerifyPage));
-            AppearanceApplier.ApplyTitleBar(SettingsStore.Load()); // window now exists
+            AppearanceApplier.ApplyWindowChrome(SettingsStore.Load()); // window now exists
         };
     }
 }
