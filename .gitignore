@@ -1,0 +1,57 @@
+# Build output
+bin/
+obj/
+out/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.pidb
+*.ncb
+*.sdf
+*.opensdf
+*.cachefile
+*.aps
+*.DotSettings.user
+
+# NuGet
+packages/
+*.nupkg
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Publish output
+publish/
+
+# Local config / secrets
+appsettings.Local.json
+*.pfx
+*.p12
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# VS Code
+.vscode/
+
+# FileDrift run logs (local only)
+Logs/
+
+# Temp
+*.tmp
+*.log
+~$*
