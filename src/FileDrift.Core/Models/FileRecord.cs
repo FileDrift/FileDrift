@@ -1,7 +1,8 @@
 namespace FileDrift.Core.Models;
 
-/// <summary>Represents a single enumerated file entry from either an MFT or SMB scan.</summary>
-public sealed class FileRecord
+/// <summary>Represents a single enumerated file entry from either an MFT or SMB scan.
+/// A record so hash/ACL enrichment can produce copies via <c>with</c> expressions.</summary>
+public sealed record FileRecord
 {
     public required string RelativePath { get; init; }
     public required string FullPath { get; init; }
