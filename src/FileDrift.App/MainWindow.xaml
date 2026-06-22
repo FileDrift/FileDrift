@@ -16,6 +16,10 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- Backmost layer for the optional window background tint. Transparent = Mica shows through. -->
+        <Border x:Name="BackgroundLayer" Grid.Row="0" Grid.RowSpan="2"
+                Background="Transparent" IsHitTestVisible="False" />
+
         <ui:TitleBar x:Name="AppTitleBar" Grid.Row="0" Title="FileDrift" />
 
         <ui:NavigationView x:Name="RootNavigation"

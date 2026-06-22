@@ -10,7 +10,6 @@ namespace FileDrift.App.Settings;
 public static class AppearanceApplier
 {
     public const string DefaultToken = "Default";
-    private const string BackgroundBrushKey = "ApplicationBackgroundBrush";
 
     public static readonly (string Name, Color Color)[] Accents =
     [
@@ -34,41 +33,35 @@ public static class AppearanceApplier
         ApplyWindowChrome(settings);
     }
 
-    /// <summary>Applies the title-bar tint and window background. The background's app-level brush
-    /// override is set unconditionally; the window-specific parts run only once the window exists.</summary>
+    /// <summary>Tints the title bar and the background layer. No backdrop toggling — changing
+    /// WindowBackdropType at runtime throws inside WPF-UI's FluentWindow.SetWindowChrome.
+    /// A custom background simply paints an opaque layer over the Mica; Default stays transparent.</summary>
     public static void ApplyWindowChrome(AppSettings settings)
     {
-        bool customBackground = !IsDefault(settings.Background);
-
-        // App-level background brush override (independent of the window instance).
-        if (customBackground)
-            Application.Current.Resources[BackgroundBrushKey] = new SolidColorBrush(ResolveColor(settings.Background));
-        else if (Application.Current.Resources.Contains(BackgroundBrushKey))
-            Application.Current.Resources.Remove(BackgroundBrushKey);
-
         if (Application.Current?.MainWindow is not MainWindow main)
             return;
 
-        // Title bar.
         if (main.AppTitleBar is { } titleBar)
         {
             if (IsDefault(settings.TitleBar))
                 titleBar.ClearValue(Control.BackgroundProperty);
             else
-                titleBar.Background = new SolidColorBrush(ResolveColor(settings.TitleBar));
+                titleBar.Background = FrozenBrush(ResolveColor(settings.TitleBar));
         }
 
-        // Window background: a solid tint requires turning the Mica backdrop off.
-        if (customBackground)
+        if (main.BackgroundLayer is { } layer)
         {
-            main.WindowBackdropType = WindowBackdropType.None;
-            main.Background = new SolidColorBrush(ResolveColor(settings.Background));
+            layer.Background = IsDefault(settings.Background)
+                ? Brushes.Transparent
+                : FrozenBrush(ResolveColor(settings.Background));
         }
-        else
-        {
-            main.WindowBackdropType = WindowBackdropType.Mica;
-            main.ClearValue(Window.BackgroundProperty);
-        }
+    }
+
+    private static SolidColorBrush FrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>Resolves a "#hex" string or a named accent to a Color (falls back to the default blue).</summary>
