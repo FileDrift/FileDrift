@@ -9,11 +9,16 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>FileDrift</AssemblyName>
     <RootNamespace>FileDrift.App</RootNamespace>
+    <StartupObject>FileDrift.App.Program</StartupObject>
     <ApplicationIcon>..\..\FileDrift.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FileDrift.Core\FileDrift.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="3.0.0-preview.5.26302.115" />
   </ItemGroup>
 
 </Project>
