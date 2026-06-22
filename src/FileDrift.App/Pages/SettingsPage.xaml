@@ -7,30 +7,40 @@
     <StackPanel Margin="20,12,20,12">
         <ui:TextBlock Text="Settings" FontTypography="Subtitle" Margin="0,0,0,16" />
 
-        <ui:CardControl Icon="{ui:SymbolIcon PaintBrush24}" Margin="0,0,0,10">
+        <ui:CardControl Icon="{ui:SymbolIcon WeatherMoon24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>
-                    <ui:TextBlock Text="Color scheme" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Light, Dark, or Pride (rainbow accents). Saved between sessions."
+                    <ui:TextBlock Text="Theme" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Light or dark base. Saved between sessions."
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>
-            <ComboBox x:Name="SchemeBox" Width="150" SelectionChanged="OnSchemeChanged">
+            <ComboBox x:Name="ThemeBox" Width="160" SelectionChanged="OnThemeChanged">
                 <ComboBoxItem Content="Light" />
                 <ComboBoxItem Content="Dark" />
-                <ComboBoxItem Content="Pride" />
             </ComboBox>
         </ui:CardControl>
 
-        <ui:CardControl x:Name="AccentCard" Icon="{ui:SymbolIcon Color24}" Margin="0,0,0,10">
+        <ui:CardControl Icon="{ui:SymbolIcon Color24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>
                     <ui:TextBlock Text="Accent color" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Recolors buttons, selection, and highlights (Light/Dark only)"
+                    <ui:TextBlock Text="Buttons, selection, and highlights"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>
-            <ComboBox x:Name="AccentBox" Width="150" SelectionChanged="OnAccentChanged" />
+            <ComboBox x:Name="AccentBox" Width="160" SelectionChanged="OnAccentChanged" />
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon PaintBrush24}" Margin="0,0,0,10">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Title bar" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Tint the title bar, or leave Default for the Mica backdrop"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <ComboBox x:Name="TitleBarBox" Width="160" SelectionChanged="OnTitleBarChanged" />
         </ui:CardControl>
 
         <ui:CardControl Icon="{ui:SymbolIcon Info24}" Margin="0,0,0,10">

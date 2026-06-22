@@ -33,6 +33,7 @@ public partial class VerifyPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ThreadsBox.Text = VerifyOptions.DefaultThreads.ToString(); // 50% of logical processors
+        ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
         UpdateHashVisibility();
         RefreshCredentialCombos();
     }

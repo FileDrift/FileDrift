@@ -16,7 +16,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="FileDrift" />
+        <ui:TitleBar x:Name="AppTitleBar" Grid.Row="0" Title="FileDrift" />
 
         <ui:NavigationView x:Name="RootNavigation"
                            Grid.Row="1"

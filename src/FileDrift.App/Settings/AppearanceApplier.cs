@@ -5,10 +5,10 @@ using Wpf.Ui.Controls;
 
 namespace FileDrift.App.Settings;
 
-/// <summary>Applies a color scheme (Light / Dark / Pride) and accent to the running application.</summary>
+/// <summary>Applies the base theme, accent (highlight/button) color, and title-bar tint.</summary>
 public static class AppearanceApplier
 {
-    public const string Pride = "Pride";
+    public const string DefaultTitleBar = "Default";
 
     public static readonly (string Name, Color Color)[] Accents =
     [
@@ -21,38 +21,33 @@ public static class AppearanceApplier
         ("Red",            Color.FromRgb(0xC4, 0x2B, 0x1C)),
     ];
 
-    // Accent background brushes used by Primary buttons, toggles, selection, etc. Both the
-    // SystemAccentColor* family (what ApplicationAccentColorManager drives) and the Fluent
-    // AccentFillColor* family are overridden so the gradient reaches every accent surface.
-    private static readonly string[] AccentBrushKeys =
-    [
-        "SystemAccentColorPrimaryBrush",
-        "SystemAccentColorSecondaryBrush",
-        "SystemAccentColorTertiaryBrush",
-        "AccentFillColorDefaultBrush",
-        "AccentFillColorSecondaryBrush",
-        "AccentFillColorTertiaryBrush",
-    ];
-
     public static void Apply(AppSettings settings)
     {
-        bool pride = string.Equals(settings.ColorScheme, Pride, StringComparison.OrdinalIgnoreCase);
-        bool dark = pride || string.Equals(settings.ColorScheme, "Dark", StringComparison.OrdinalIgnoreCase);
-        var theme = dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
+        var theme = string.Equals(settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase)
+            ? ApplicationTheme.Dark
+            : ApplicationTheme.Light;
 
         ApplicationThemeManager.Apply(theme, WindowBackdropType.Mica, updateAccent: false);
-
-        ClearPrideOverrides();
-        if (pride)
-            ApplyPride(theme);
-        else
-            ApplyAccent(settings.Accent, theme);
+        ApplicationAccentColorManager.Apply(ResolveAccent(settings.Accent), theme, false, false);
+        ApplyTitleBar(settings);
     }
 
-    private static void ApplyAccent(string accentName, ApplicationTheme theme)
+    /// <summary>Tints the running window's title bar. No-op if the main window isn't built yet
+    /// (startup applies it again from <see cref="MainWindow"/> once the window loads).</summary>
+    public static void ApplyTitleBar(AppSettings settings)
     {
-        var color = ResolveAccent(accentName);
-        ApplicationAccentColorManager.Apply(color, theme, systemGlassColor: false, systemAccentColor: false);
+        if (Application.Current?.MainWindow is not MainWindow main || main.AppTitleBar is not { } titleBar)
+            return;
+
+        if (string.IsNullOrEmpty(settings.TitleBar) ||
+            string.Equals(settings.TitleBar, DefaultTitleBar, StringComparison.OrdinalIgnoreCase))
+        {
+            titleBar.ClearValue(System.Windows.Controls.Control.BackgroundProperty); // back to Mica
+        }
+        else
+        {
+            titleBar.Background = new SolidColorBrush(ResolveAccent(settings.TitleBar));
+        }
     }
 
     public static Color ResolveAccent(string accentName)
@@ -61,38 +56,5 @@ public static class AppearanceApplier
             if (string.Equals(name, accentName, StringComparison.OrdinalIgnoreCase))
                 return color;
         return Accents[0].Color;
-    }
-
-    private static void ApplyPride(ApplicationTheme theme)
-    {
-        // Override the accent brushes directly with the rainbow gradient. We deliberately do NOT
-        // call ApplicationAccentColorManager here — it would reset these keys to a solid color.
-        var rainbow = BuildRainbowBrush();
-        foreach (var key in AccentBrushKeys)
-            Application.Current.Resources[key] = rainbow;
-    }
-
-    private static void ClearPrideOverrides()
-    {
-        foreach (var key in AccentBrushKeys)
-            if (Application.Current.Resources.Contains(key))
-                Application.Current.Resources.Remove(key);
-    }
-
-    private static LinearGradientBrush BuildRainbowBrush()
-    {
-        var brush = new LinearGradientBrush(
-            new GradientStopCollection
-            {
-                new(Color.FromRgb(0xE4, 0x03, 0x03), 0.00), // red
-                new(Color.FromRgb(0xFF, 0x8C, 0x00), 0.20), // orange
-                new(Color.FromRgb(0xFF, 0xED, 0x00), 0.40), // yellow
-                new(Color.FromRgb(0x00, 0x80, 0x26), 0.60), // green
-                new(Color.FromRgb(0x00, 0x4C, 0xFF), 0.80), // blue
-                new(Color.FromRgb(0x75, 0x07, 0x87), 1.00), // purple
-            },
-            new Point(0, 0), new Point(1, 0));
-        brush.Freeze();
-        return brush;
     }
 }
