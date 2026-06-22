@@ -11,7 +11,7 @@ public static class ColorPresets
     public static readonly ColorPreset[] All =
     [
         //                Name              Accent       TitleBar     Background (soft light tint)
-        new("Pride",          "#E40303", "#750787", "#FBF2F7"),
+        new("Pride",          "#750787", "#E40303", "#F4DCEA"),
         new("African Unity",  "#1B7A34", "#C1121F", "#FBF6E6"),
         new("Sunset",         "#E2632A", "#8A2E5D", "#FFF3EA"),
         new("Desert",         "#BE7A3F", "#6E5A34", "#FAF4E8"),
