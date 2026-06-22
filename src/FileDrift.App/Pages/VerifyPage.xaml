@@ -83,11 +83,11 @@
                              ToolTip="Exact match: forces Full depth, SHA-256, ACL comparison, and zero timestamp tolerance. Any byte, permission, or timestamp difference counts as a difference." />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
-                        ToolTip="Parallel workers for enumeration and hashing. Defaults to 50% of logical processors. Raise for fast disks, lower to limit load.">
+                        ToolTip="Parallel workers for enumeration and hashing. Defaults to 50% of logical processors. Raise for fast disks, lower to limit load. Range 1–64.">
                 <ui:TextBlock Text="Threads" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <ui:NumberBox x:Name="ThreadsBox" Width="92" Minimum="1" Maximum="64"
-                              MaxDecimalPlaces="0" SpinButtonPlacementMode="Inline" />
+                <ui:TextBox x:Name="ThreadsBox" Width="56" MaxLength="2"
+                            PreviewTextInput="OnThreadsInput" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"

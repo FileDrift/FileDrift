@@ -21,9 +21,14 @@ public static class AppearanceApplier
         ("Red",            Color.FromRgb(0xC4, 0x2B, 0x1C)),
     ];
 
-    // Fluent accent fill brushes used by Primary buttons, toggles, selection, etc.
+    // Accent background brushes used by Primary buttons, toggles, selection, etc. Both the
+    // SystemAccentColor* family (what ApplicationAccentColorManager drives) and the Fluent
+    // AccentFillColor* family are overridden so the gradient reaches every accent surface.
     private static readonly string[] AccentBrushKeys =
     [
+        "SystemAccentColorPrimaryBrush",
+        "SystemAccentColorSecondaryBrush",
+        "SystemAccentColorTertiaryBrush",
         "AccentFillColorDefaultBrush",
         "AccentFillColorSecondaryBrush",
         "AccentFillColorTertiaryBrush",
@@ -60,9 +65,8 @@ public static class AppearanceApplier
 
     private static void ApplyPride(ApplicationTheme theme)
     {
-        // Base accent (a vibrant purple) so any element not covered by the gradient still reads "pride".
-        ApplicationAccentColorManager.Apply(Color.FromRgb(0x75, 0x07, 0x87), theme, false, false);
-
+        // Override the accent brushes directly with the rainbow gradient. We deliberately do NOT
+        // call ApplicationAccentColorManager here — it would reset these keys to a solid color.
         var rainbow = BuildRainbowBrush();
         foreach (var key in AccentBrushKeys)
             Application.Current.Resources[key] = rainbow;

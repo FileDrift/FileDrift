@@ -32,11 +32,16 @@ public partial class VerifyPage : Page
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Set NumberBox.Value here (after the template is applied) so it actually paints.
-        ThreadsBox.Value = VerifyOptions.DefaultThreads; // 50% of logical processors
+        ThreadsBox.Text = VerifyOptions.DefaultThreads.ToString(); // 50% of logical processors
         UpdateHashVisibility();
         RefreshCredentialCombos();
     }
+
+    private void OnThreadsInput(object sender, System.Windows.Input.TextCompositionEventArgs e) =>
+        e.Handled = !e.Text.All(char.IsDigit);
+
+    private int ResolveThreads() =>
+        int.TryParse(ThreadsBox.Text, out var n) ? Math.Clamp(n, 1, 64) : VerifyOptions.DefaultThreads;
 
     // ── credential combos ──
 
@@ -171,7 +176,7 @@ public partial class VerifyPage : Page
         Depth = (VerifyDepth)Math.Max(0, DepthBox.SelectedIndex),
         HashAlgorithm = (FileDriftHashAlgorithm)Math.Max(0, HashBox.SelectedIndex),
         IncludeAcl = AclSwitch.IsChecked == true,
-        Threads = (int)(ThreadsBox.Value ?? VerifyOptions.DefaultThreads),
+        Threads = ResolveThreads(),
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         Strict = StrictSwitch.IsChecked == true,
