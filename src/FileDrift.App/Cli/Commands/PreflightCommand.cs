@@ -1,4 +1,5 @@
 using System.CommandLine;
+using FileDrift.Core.Models;
 
 namespace FileDrift.App.Cli.Commands;
 
@@ -8,16 +9,49 @@ internal static class PreflightCommand
     {
         var src = new Option<string>("--src") { Description = "Source path (local or UNC)", Required = true };
         var dst = new Option<string>("--dst") { Description = "Destination path (local or UNC)", Required = true };
+        var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
+        var credDst = new Option<string>("--cred-dest") { Description = "Saved credential target name for the destination share" };
 
-        var cmd = new Command("preflight", "Check that source and destination are accessible before running a verify");
+        var cmd = new Command("preflight", "Check that source and destination are accessible and report file/byte counts");
         cmd.Add(src);
         cmd.Add(dst);
+        cmd.Add(credSrc);
+        cmd.Add(credDst);
 
-        cmd.SetAction(parseResult =>
+        cmd.SetAction(async (parseResult, ct) =>
         {
             var srcVal = parseResult.GetValue(src)!;
             var dstVal = parseResult.GetValue(dst)!;
-            CliOutput.Write(new { verb = "preflight", status = "not_implemented", args = new { src = srcVal, dst = dstVal } });
+
+            try
+            {
+                var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
+                var destCred = CliServices.ResolveCredential(parseResult.GetValue(credDst));
+
+                var result = await CliServices.Preflight().RunAsync(
+                    srcVal, dstVal, new VerifyOptions(), sourceCred, destCred, progress: null, ct);
+
+                CliOutput.Write(new
+                {
+                    verb = "preflight",
+                    status = result.IsReady ? "ready" : "blocked",
+                    checkedAtUtc = result.CheckedAtUtc,
+                    source = result.SourcePath,
+                    destination = result.DestPath,
+                    sourceAccessible = result.SourceAccessible,
+                    destAccessible = result.DestAccessible,
+                    sourceFiles = result.SourceFileCount,
+                    destFiles = result.DestFileCount,
+                    sourceBytes = result.SourceTotalBytes,
+                    destBytes = result.DestTotalBytes,
+                    issues = result.Issues,
+                });
+                return result.IsReady ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                return CliOutput.Error("preflight", ex.Message, ex.GetType().Name);
+            }
         });
 
         return cmd;

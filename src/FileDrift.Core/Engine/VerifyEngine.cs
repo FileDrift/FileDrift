@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 
@@ -32,6 +33,8 @@ public sealed class VerifyEngine
         string sourcePath,
         string destPath,
         VerifyOptions options,
+        NetworkCredential? sourceCredential = null,
+        NetworkCredential? destCredential = null,
         IProgress<VerifyProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -46,8 +49,15 @@ public sealed class VerifyEngine
         };
         await _repository.SaveAsync(run, cancellationToken);
 
+        var connections = new List<IDisposable>();
         try
         {
+            // Authenticate UNC shares with the supplied credentials, if any.
+            if (sourceCredential is not null && NetworkPath.IsUnc(sourcePath))
+                connections.Add(new NetworkConnection(NetworkPath.GetShareRoot(sourcePath), sourceCredential));
+            if (destCredential is not null && NetworkPath.IsUnc(destPath))
+                connections.Add(new NetworkConnection(NetworkPath.GetShareRoot(destPath), destCredential));
+
             // Phase 1 & 2 — enumerate both trees
             var source = await EnumerateAsync(sourcePath, options, VerifyPhase.EnumeratingSource, progress, cancellationToken);
             var dest   = await EnumerateAsync(destPath, options, VerifyPhase.EnumeratingDestination, progress, cancellationToken);
@@ -95,6 +105,11 @@ public sealed class VerifyEngine
             await SaveQuietlyAsync(run);
             throw;
         }
+        finally
+        {
+            foreach (var connection in connections)
+                connection.Dispose();
+        }
     }
 
     private async Task<ConcurrentDictionary<string, FileRecord>> EnumerateAsync(
@@ -105,6 +120,7 @@ public sealed class VerifyEngine
         CancellationToken ct)
     {
         var map = new ConcurrentDictionary<string, FileRecord>(StringComparer.OrdinalIgnoreCase);
+        var excludes = new GlobMatcher(options.ExcludePatterns);
         long count = 0;
 
         var enumProgress = new Progress<EnumerationProgress>(p =>
@@ -117,6 +133,7 @@ public sealed class VerifyEngine
 
         await foreach (var record in _enumerator.EnumerateAsync(rootPath, options, enumProgress, ct))
         {
+            if (excludes.IsExcluded(record.RelativePath)) continue;
             map[record.RelativePath] = record;
             count++;
         }

@@ -1,4 +1,5 @@
 using System.CommandLine;
+using FileDrift.Core.Models;
 
 namespace FileDrift.App.Cli.Commands;
 
@@ -8,32 +9,106 @@ internal static class VerifyCommand
     {
         var src     = new Option<string>("--src")   { Description = "Source path (local or UNC)", Required = true };
         var dst     = new Option<string>("--dst")   { Description = "Destination path (local or UNC)", Required = true };
-        var depth   = new Option<string>("--depth") { Description = "Comparison depth: quick | standard | full (default: standard)" };
+        var depth   = new Option<string>("--depth") { Description = "quick | standard | full (default: standard)" };
+        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: sha256, full depth only)" };
         var acl     = new Option<bool>("--acl")     { Description = "Include ACL comparison" };
-        var threads = new Option<int>("--threads")  { Description = "Parallel threads for enumeration (default: 8)" };
+        var threads = new Option<int>("--threads")  { Description = "Parallel threads (default: 8)" };
+        var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
+        var credDst = new Option<string>("--cred-dest")   { Description = "Saved credential target name for the destination share" };
+        var exclude = new Option<string>("--exclude") { Description = "Comma-separated glob patterns to exclude (e.g. \"*.tmp,~$*\")" };
+        var all     = new Option<bool>("--all")     { Description = "Include matched files in the differences array (default: differences only)" };
 
         var cmd = new Command("verify", "Compare source and destination trees and report differences");
-        cmd.Add(src);
-        cmd.Add(dst);
-        cmd.Add(depth);
-        cmd.Add(acl);
-        cmd.Add(threads);
+        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, all })
+            cmd.Add(o);
 
-        cmd.SetAction(parseResult =>
+        cmd.SetAction(async (parseResult, ct) =>
         {
-            var srcVal     = parseResult.GetValue(src)!;
-            var dstVal     = parseResult.GetValue(dst)!;
-            var depthVal   = parseResult.GetValue(depth) ?? "standard";
-            var aclVal     = parseResult.GetValue(acl);
-            var threadsVal = parseResult.GetValue(threads) is int t && t > 0 ? t : 8;
-            CliOutput.Write(new
+            var srcVal = parseResult.GetValue(src)!;
+            var dstVal = parseResult.GetValue(dst)!;
+
+            try
             {
-                verb   = "verify",
-                status = "not_implemented",
-                args   = new { src = srcVal, dst = dstVal, depth = depthVal, acl = aclVal, threads = threadsVal }
-            });
+                var options = new VerifyOptions
+                {
+                    Depth = ParseDepth(parseResult.GetValue(depth)),
+                    HashAlgorithm = ParseHash(parseResult.GetValue(hash)),
+                    IncludeAcl = parseResult.GetValue(acl),
+                    Threads = parseResult.GetValue(threads) is int t && t > 0 ? t : 8,
+                    ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                };
+
+                var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
+                var destCred = CliServices.ResolveCredential(parseResult.GetValue(credDst));
+
+                var result = await CliServices.Verify().RunAsync(
+                    srcVal, dstVal, options, sourceCred, destCred, progress: null, ct);
+
+                bool includeMatched = parseResult.GetValue(all);
+                var rows = result.Comparisons
+                    .Where(c => includeMatched || c.Status != ComparisonStatus.Matched)
+                    .Select(c => new
+                    {
+                        path = c.RelativePath,
+                        status = c.Status,
+                        differences = c.Differences == FileDifference.None ? null : c.Differences.ToString(),
+                        sizeBytes = (c.Source ?? c.Dest)?.SizeBytes,
+                    });
+
+                var run = result.Run;
+                CliOutput.Write(new
+                {
+                    verb = "verify",
+                    status = run.Status,
+                    runId = run.Id,
+                    startedAtUtc = run.StartedAtUtc,
+                    completedAtUtc = run.CompletedAtUtc,
+                    source = run.SourcePath,
+                    destination = run.DestPath,
+                    options = new
+                    {
+                        depth = options.Depth,
+                        hashAlgorithm = options.HashAlgorithm,
+                        includeAcl = options.IncludeAcl,
+                        threads = options.Threads,
+                    },
+                    summary = new
+                    {
+                        sourceFiles = run.TotalSourceFiles,
+                        destFiles = run.TotalDestFiles,
+                        matched = run.MatchedCount,
+                        different = run.DifferentCount,
+                        missingAtDest = run.MissingAtDestCount,
+                        extraAtDest = run.ExtraAtDestCount,
+                    },
+                    differences = rows,
+                });
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                return CliOutput.Error("verify", ex.Message, ex.GetType().Name);
+            }
         });
 
         return cmd;
     }
+
+    private static VerifyDepth ParseDepth(string? value) => value?.ToLowerInvariant() switch
+    {
+        "quick" => VerifyDepth.Quick,
+        "full" => VerifyDepth.Full,
+        null or "" or "standard" => VerifyDepth.Standard,
+        _ => throw new ArgumentException($"Unknown depth '{value}'. Use quick, standard, or full."),
+    };
+
+    private static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch
+    {
+        "md5" => FileDriftHashAlgorithm.MD5,
+        "sha1" => FileDriftHashAlgorithm.SHA1,
+        null or "" or "sha256" => FileDriftHashAlgorithm.SHA256,
+        _ => throw new ArgumentException($"Unknown hash '{value}'. Use md5, sha1, or sha256."),
+    };
 }

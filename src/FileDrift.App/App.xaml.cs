@@ -26,7 +26,9 @@ public partial class App : Application
                 Console.WriteLine(); // separate output from the shell prompt
             }
 
-            int exitCode = CliRunner.Run(e.Args);
+            // Run on a thread-pool thread: the WPF dispatcher's SynchronizationContext would
+            // otherwise deadlock sync-over-async, and CLI work must not touch the UI thread.
+            int exitCode = Task.Run(() => CliRunner.RunAsync(e.Args)).GetAwaiter().GetResult();
             Shutdown(exitCode);
             return;
         }

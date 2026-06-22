@@ -29,6 +29,11 @@
                         <ui:SymbolIcon Symbol="CheckmarkCircle24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Credentials" TargetPageType="{x:Type pages:CredentialsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Key24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="History" TargetPageType="{x:Type pages:HistoryPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="History24" />

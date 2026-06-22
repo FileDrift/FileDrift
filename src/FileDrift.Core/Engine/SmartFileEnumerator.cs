@@ -58,22 +58,29 @@ public sealed class SmartFileEnumerator : IFileEnumerator
             yield return record;
     }
 
-    private static bool IsLocalNtfs(string path)
+    private static bool IsLocalNtfs(string path) => PredictSource(path) == EnumerationSource.Mft;
+
+    /// <summary>Predicts which strategy a path will use: MFT for local fixed NTFS volumes, SMB otherwise.
+    /// MFT may still fall back to SMB at runtime if privileges are insufficient.</summary>
+    public static EnumerationSource PredictSource(string path)
     {
-        if (path.StartsWith(@"\\", StringComparison.Ordinal)) return false; // UNC path
+        if (string.IsNullOrEmpty(path) || path.StartsWith(@"\\", StringComparison.Ordinal))
+            return EnumerationSource.Smb; // UNC path
 
         var root = Path.GetPathRoot(path);
-        if (root is null) return false;
+        if (root is null) return EnumerationSource.Smb;
 
         try
         {
             var drive = new DriveInfo(root);
             return drive.DriveType == DriveType.Fixed
-                && drive.DriveFormat.Equals("NTFS", StringComparison.OrdinalIgnoreCase);
+                && drive.DriveFormat.Equals("NTFS", StringComparison.OrdinalIgnoreCase)
+                ? EnumerationSource.Mft
+                : EnumerationSource.Smb;
         }
         catch
         {
-            return false;
+            return EnumerationSource.Smb;
         }
     }
 }
