@@ -9,7 +9,6 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>FileDrift</AssemblyName>
     <RootNamespace>FileDrift.App</RootNamespace>
-    <StartupObject>FileDrift.App.Program</StartupObject>
     <ApplicationIcon>..\..\FileDrift.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -19,6 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="3.0.0-preview.5.26302.115" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>
 
 </Project>

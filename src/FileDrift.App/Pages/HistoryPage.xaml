@@ -1,0 +1,30 @@
+<Page x:Class="FileDrift.App.Pages.HistoryPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="History">
+    <Grid Margin="24,16,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <ui:TextBlock Text="History" FontTypography="Title" VerticalAlignment="Center" />
+            <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}"
+                       HorizontalAlignment="Right" Click="OnRefresh" />
+        </Grid>
+
+        <DataGrid x:Name="HistoryGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Started" Binding="{Binding Started}" Width="160" />
+                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
+                <DataGridTextColumn Header="Destination" Binding="{Binding Dest}" Width="*" />
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
+                <DataGridTextColumn Header="Matched" Binding="{Binding Matched}" Width="90" />
+                <DataGridTextColumn Header="Differences" Binding="{Binding Differences}" Width="100" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Page>

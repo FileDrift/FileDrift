@@ -1,0 +1,41 @@
+<Page x:Class="FileDrift.App.Pages.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Settings">
+    <StackPanel Margin="24,16,24,16">
+        <ui:TextBlock Text="Settings" FontTypography="Title" Margin="0,0,0,20" />
+
+        <ui:CardControl Icon="{ui:SymbolIcon DarkTheme24}" Margin="0,0,0,12">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Dark mode" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Switch between light and dark themes"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <ui:ToggleSwitch x:Name="ThemeSwitch" Click="OnThemeToggle" />
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon Info24}" Margin="0,0,0,12">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Version" FontTypography="BodyStrong" />
+                    <ui:TextBlock x:Name="VersionText" Text="—"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                </StackPanel>
+            </ui:CardControl.Header>
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon Database24}">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="History database" FontTypography="BodyStrong" />
+                    <ui:TextBlock x:Name="DbPathText" Text="—"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13"
+                                  TextWrapping="Wrap" />
+                </StackPanel>
+            </ui:CardControl.Header>
+        </ui:CardControl>
+    </StackPanel>
+</Page>

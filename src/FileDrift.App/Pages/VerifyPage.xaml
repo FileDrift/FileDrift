@@ -1,0 +1,114 @@
+<Page x:Class="FileDrift.App.Pages.VerifyPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Verify">
+    <Grid Margin="24,16,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TextBlock Grid.Row="0" Text="Verify" FontTypography="Title" Margin="0,0,0,16" />
+
+        <!-- Paths -->
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <ui:TextBlock Grid.Row="0" Grid.Column="0" Text="Source" VerticalAlignment="Center"
+                          Width="90" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:TextBox x:Name="SourceBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,8"
+                        PlaceholderText="\\server\share or D:\data" />
+            <ui:Button Grid.Row="0" Grid.Column="2" Content="Browse" Margin="0,0,0,8"
+                       Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseSource" />
+
+            <ui:TextBlock Grid.Row="1" Grid.Column="0" Text="Destination" VerticalAlignment="Center"
+                          Width="90" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:TextBox x:Name="DestBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,0"
+                        PlaceholderText="\\server2\share2 or E:\backup" />
+            <ui:Button Grid.Row="1" Grid.Column="2" Content="Browse"
+                       Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseDest" />
+        </Grid>
+
+        <!-- Options -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,4,0,16">
+            <ui:TextBlock Text="Depth" VerticalAlignment="Center" Margin="0,0,8,0"
+                          Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ComboBox x:Name="DepthBox" Width="130" SelectedIndex="1" VerticalAlignment="Center">
+                <ComboBoxItem Content="Quick (size)" />
+                <ComboBoxItem Content="Standard (+time)" />
+                <ComboBoxItem Content="Full (+hash)" />
+            </ComboBox>
+
+            <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="24,0,0,0" VerticalAlignment="Center" />
+
+            <ui:TextBlock Text="Threads" VerticalAlignment="Center" Margin="24,0,8,0"
+                          Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:NumberBox x:Name="ThreadsBox" Width="96" Value="8" Minimum="1" Maximum="64"
+                          MaxDecimalPlaces="0" VerticalAlignment="Center" />
+
+            <ui:Button x:Name="VerifyButton" Content="Verify" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Play24}" Margin="24,0,0,0" Click="OnVerifyClick" />
+            <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0"
+                       Icon="{ui:SymbolIcon Stop24}" Click="OnCancelClick" Visibility="Collapsed" />
+        </StackPanel>
+
+        <!-- Progress -->
+        <StackPanel Grid.Row="3" Margin="0,0,0,16">
+            <ProgressBar x:Name="ProgressBar" Height="4" Minimum="0" Maximum="100" Value="0" />
+            <ui:TextBlock x:Name="StatusText" Text="Ready" Margin="0,8,0,0"
+                          Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <!-- Summary -->
+        <UniformGrid Grid.Row="4" Columns="4" Margin="0,0,0,16">
+            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Margin="0,0,6,0" Padding="14,10">
+                <StackPanel>
+                    <ui:TextBlock Text="Matched" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                    <ui:TextBlock x:Name="MatchedText" Text="—" FontTypography="Subtitle" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Margin="3,0,3,0" Padding="14,10">
+                <StackPanel>
+                    <ui:TextBlock Text="Different" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                    <ui:TextBlock x:Name="DifferentText" Text="—" FontTypography="Subtitle" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Margin="3,0,3,0" Padding="14,10">
+                <StackPanel>
+                    <ui:TextBlock Text="Missing at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                    <ui:TextBlock x:Name="MissingText" Text="—" FontTypography="Subtitle" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="8" Margin="6,0,0,0" Padding="14,10">
+                <StackPanel>
+                    <ui:TextBlock Text="Extra at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="13" />
+                    <ui:TextBlock x:Name="ExtraText" Text="—" FontTypography="Subtitle" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- Results -->
+        <DataGrid x:Name="ResultsGrid" Grid.Row="5" AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*" />
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                <DataGridTextColumn Header="Difference" Binding="{Binding Differences}" Width="140" />
+                <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="110" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Page>
