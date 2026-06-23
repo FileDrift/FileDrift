@@ -85,6 +85,20 @@ Self-contained single-file publish:
 dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFile=true -o publish/
 ```
 
+## Changelog
+
+Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 0.1.1 (2026-06-23)
+- Fix crash when typing a UNC path into the source/destination box (partial-path parsing threw on the second backslash).
+- Fix the app becoming unresponsive when verifying very large trees (1M+ files): the results grid now lists **differences only** (matched files are summarised by the count tile), projected off the UI thread and bound in one pass, capped at 100,000 rows.
+- Throttle the activity log on large shares so it can't flood the UI thread.
+- Treat an existing Kerberos/domain session as success on authenticated shares (no more false auth failures on domain machines).
+- Move the Copy button below the activity log and make it accent-colored.
+
+### 0.1.0
+- Initial C# / WPF / .NET 9 rewrite. Preflight, verify (MFT + SMB), as-of cutoff, Reconcile (source→destination), run history, Windows Credential Manager, named color presets.
+
 ## License
 
 [MIT](LICENSE)
