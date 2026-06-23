@@ -76,7 +76,11 @@
             </StackPanel>
 
             <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center"
-                             ToolTip="Also compare each file's owner and permissions (SDDL). Slower; reads security descriptors for every matched pair." />
+                             ToolTip="Compare explicit (non-inherited) permissions on files AND folders. Inherited permissions are ignored (they differ structurally between servers). Enumerates directories too; slower." />
+
+            <ui:ToggleSwitch x:Name="OwnerSwitch" Content="Enforce ownership" Margin="0,0,18,8" VerticalAlignment="Center"
+                             ToolTipService.ShowOnDisabled="True"
+                             ToolTip="Only applies with Compare ACLs. Also require the owner to match (and copy it on reconcile). Off by default — owners often differ across servers without being meaningful drift." />
 
             <ui:ToggleSwitch x:Name="StrictSwitch" Content="Strict Mode" Margin="0,0,18,8" VerticalAlignment="Center"
                              Checked="OnStrictChanged" Unchecked="OnStrictChanged"

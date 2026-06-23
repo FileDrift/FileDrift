@@ -33,7 +33,7 @@ public sealed class ComparisonEngine
             if (destByPath.TryGetValue(s.RelativePath, out var d))
             {
                 matchedDestPaths.Add(s.RelativePath);
-                var diff = ComputeDifferences(s, d, options);
+                var diff = ComputeDifferences(s, d, options, out var aclDetail);
                 results.Add(new ComparisonResult
                 {
                     RelativePath = s.RelativePath,
@@ -41,6 +41,7 @@ public sealed class ComparisonEngine
                     Differences = diff,
                     Source = s,
                     Dest = d,
+                    AclDetail = aclDetail,
                 });
             }
             else
@@ -68,34 +69,57 @@ public sealed class ComparisonEngine
         return results;
     }
 
-    private FileDifference ComputeDifferences(FileRecord s, FileRecord d, VerifyOptions options)
+    private FileDifference ComputeDifferences(FileRecord s, FileRecord d, VerifyOptions options, out string? aclDetail)
     {
+        aclDetail = null;
         var diff = FileDifference.None;
 
-        if (s.SizeBytes != d.SizeBytes)
-            diff |= FileDifference.Size;
-
-        if (options.Depth >= VerifyDepth.Standard)
+        // Content checks apply to files only — a directory's size/timestamp/hash aren't meaningful.
+        if (!s.IsDirectory)
         {
-            var delta = (s.LastWriteTimeUtc - d.LastWriteTimeUtc).Duration();
-            if (delta > _timestampTolerance)
-                diff |= FileDifference.Timestamp;
-        }
+            if (s.SizeBytes != d.SizeBytes)
+                diff |= FileDifference.Size;
 
-        if (options.Depth >= VerifyDepth.Full)
-        {
-            // Null on either side means the hash could not be computed — treat as a difference
-            // (conservative: we could not prove equality).
-            if (!string.Equals(s.Hash, d.Hash, StringComparison.OrdinalIgnoreCase))
-                diff |= FileDifference.Hash;
+            if (options.Depth >= VerifyDepth.Standard)
+            {
+                var delta = (s.LastWriteTimeUtc - d.LastWriteTimeUtc).Duration();
+                if (delta > _timestampTolerance)
+                    diff |= FileDifference.Timestamp;
+            }
+
+            if (options.Depth >= VerifyDepth.Full)
+            {
+                // Null on either side means the hash could not be computed — treat as a difference
+                // (conservative: we could not prove equality).
+                if (!string.Equals(s.Hash, d.Hash, StringComparison.OrdinalIgnoreCase))
+                    diff |= FileDifference.Hash;
+            }
         }
 
         if (options.IncludeAcl)
         {
-            if (!string.Equals(s.SecurityDescriptor, d.SecurityDescriptor, StringComparison.Ordinal))
+            // Compare only explicit (non-inherited) permissions; inherited ACEs differ structurally
+            // between two server roots and aren't drift.
+            var aclDelta = AclModel.CompareExplicit(s.SecurityDescriptor, d.SecurityDescriptor);
+            bool ownerDiffers = options.EnforceOwnership &&
+                !string.Equals(AclModel.Owner(s.SecurityDescriptor), AclModel.Owner(d.SecurityDescriptor), StringComparison.OrdinalIgnoreCase);
+
+            if (aclDelta.Any || ownerDiffers)
+            {
                 diff |= FileDifference.Acl;
+                aclDetail = DescribeAcl(aclDelta, ownerDiffers);
+            }
         }
 
         return diff;
+    }
+
+    private static string DescribeAcl(AclModel.AclDelta delta, bool ownerDiffers)
+    {
+        var parts = new List<string>();
+        if (delta.DestMissing.Count > 0) parts.Add($"{delta.DestMissing.Count} missing on dest");
+        if (delta.DestExtra.Count > 0) parts.Add($"{delta.DestExtra.Count} extra on dest");
+        if (ownerDiffers) parts.Add("owner differs");
+        return string.Join(", ", parts);
     }
 }

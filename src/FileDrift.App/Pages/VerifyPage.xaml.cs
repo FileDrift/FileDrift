@@ -173,10 +173,12 @@ public partial class VerifyPage : Page
             DepthBox.SelectedIndex = 2;  // Full
             HashBox.SelectedIndex = 2;   // SHA256
             AclSwitch.IsChecked = true;
+            OwnerSwitch.IsChecked = true; // Strict enforces ownership too
         }
 
         DepthBox.IsEnabled = !strict;
         AclSwitch.IsEnabled = !strict;
+        OwnerSwitch.IsEnabled = !strict;
         UpdateHashVisibility();
     }
 
@@ -204,6 +206,7 @@ public partial class VerifyPage : Page
         Depth = (VerifyDepth)Math.Max(0, DepthBox.SelectedIndex),
         HashAlgorithm = (FileDriftHashAlgorithm)Math.Max(0, HashBox.SelectedIndex),
         IncludeAcl = AclSwitch.IsChecked == true,
+        EnforceOwnership = OwnerSwitch.IsChecked == true,
         Threads = ResolveThreads(),
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
@@ -416,8 +419,9 @@ public partial class VerifyPage : Page
     private ReconcilePlan? BuildPlanOrNull()
     {
         if (_lastResult is not { } r) return null;
-        // ACL reconciliation is driven by whether the verify compared ACLs.
-        var plan = ReconcileEngine.BuildPlan(r.Comparisons, _lastDst, r.Run.Options.IncludeAcl);
+        // ACL reconciliation is driven by whether the verify compared ACLs / enforced ownership.
+        var plan = ReconcileEngine.BuildPlan(
+            r.Comparisons, _lastDst, r.Run.Options.IncludeAcl, r.Run.Options.EnforceOwnership);
         return plan.TotalActions == 0 ? null : plan;
     }
 
@@ -453,9 +457,11 @@ public partial class VerifyPage : Page
         var msg = $"Reconcile will copy source → destination:\n\n" +
                   $"    • Copy {plan.CopyCount:N0} missing file(s)\n" +
                   $"    • Overwrite {plan.OverwriteCount:N0} differing file(s)\n" +
-                  (plan.AclCount > 0 ? $"    • Set permissions (ACLs) on {plan.AclCount:N0} file(s)\n" : "") +
+                  (plan.DirCreateCount > 0 ? $"    • Create {plan.DirCreateCount:N0} missing folder(s)\n" : "") +
+                  (plan.AclCount > 0 ? $"    • Add source permissions (ACLs) to {plan.AclCount:N0} item(s)\n" : "") +
                   $"\nTotal to write: {FormatSize(plan.TotalBytes)}.\n" +
-                  $"The source is the source of truth — nothing on the destination is deleted.";
+                  $"The source is the source of truth — nothing on the destination is deleted or removed " +
+                  $"(ACLs are added, never stripped).";
         if (plan.ClobberCount > 0)
             msg += $"\n\n⚠ WARNING: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
                    $"NEWER than the source. Their newer content will be lost.";
@@ -492,7 +498,8 @@ public partial class VerifyPage : Page
             ProgressBar.Value = 100;
             var summary = $"Reconcile done — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
                           $"{FormatSize(result.BytesCopied)} written" +
-                          (result.AclsApplied > 0 ? $", {result.AclsApplied:N0} ACLs set" : "") +
+                          (result.DirectoriesCreated > 0 ? $", {result.DirectoriesCreated:N0} folders created" : "") +
+                          (result.AclsApplied > 0 ? $", {result.AclsApplied:N0} ACLs updated" : "") +
                           (result.FailureCount > 0 ? $", {result.FailureCount:N0} failed." : ".");
             StatusText.Text = summary;
             AppendLog(summary);
@@ -565,7 +572,7 @@ public partial class VerifyPage : Page
         SourceBox.IsEnabled = DestBox.IsEnabled = DepthBox.IsEnabled = HashBox.IsEnabled =
             AclSwitch.IsEnabled = ThreadsBox.IsEnabled = ExcludeBox.IsEnabled =
             StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled =
-            StartBox.IsEnabled = EndBox.IsEnabled = !running;
+            OwnerSwitch.IsEnabled = StartBox.IsEnabled = EndBox.IsEnabled = !running;
 
         if (running)
         {
@@ -602,10 +609,12 @@ public partial class VerifyPage : Page
         public static ComparisonRow From(ComparisonResult c)
         {
             var record = c.Source ?? c.Dest;
+            var diff = c.Differences == FileDifference.None ? "" : c.Differences.ToString();
+            if (c.AclDetail is { } detail) diff += $" ({detail})"; // e.g. "Acl (1 missing on dest, 1 extra on dest)"
             return new ComparisonRow(
                 c.RelativePath,
                 FormatStatus(c.Status),
-                c.Differences == FileDifference.None ? "" : c.Differences.ToString(),
+                diff,
                 record is { IsDirectory: false } ? FormatSize(record.SizeBytes) : "");
         }
 

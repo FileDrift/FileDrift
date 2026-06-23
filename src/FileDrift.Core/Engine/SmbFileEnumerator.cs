@@ -62,6 +62,23 @@ public sealed class SmbFileEnumerator : IFileEnumerator
                     try
                     {
                         subdirs = Directory.GetDirectories(dir);
+
+                        // Folders are where explicit permissions usually live — emit them when comparing ACLs.
+                        if (options.IncludeAcl)
+                        {
+                            var di = new DirectoryInfo(dir);
+                            await writer.WriteAsync(new FileRecord
+                            {
+                                RelativePath      = Path.GetRelativePath(rootPath, dir),
+                                FullPath          = dir,
+                                SizeBytes         = 0,
+                                LastWriteTimeUtc  = di.LastWriteTimeUtc,
+                                CreatedTimeUtc    = di.CreationTimeUtc,
+                                IsDirectory       = true,
+                                Source            = EnumerationSource.Smb,
+                            }, ct);
+                        }
+
                         foreach (var file in Directory.EnumerateFiles(dir))
                         {
                             try

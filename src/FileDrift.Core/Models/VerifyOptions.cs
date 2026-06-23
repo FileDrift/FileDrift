@@ -7,7 +7,13 @@ public sealed record VerifyOptions
     /// <summary>Default MD5 — fast and fine for drift detection. Strict mode forces SHA-256.</summary>
     public FileDriftHashAlgorithm HashAlgorithm { get; init; } = FileDriftHashAlgorithm.MD5;
 
+    /// <summary>Compare explicit (non-inherited) DACL permissions between source and destination.
+    /// Enumerates directories too (folders are where explicit permissions usually live).</summary>
     public bool IncludeAcl { get; init; }
+
+    /// <summary>When comparing ACLs, also require the owner to match. Optional; off by default
+    /// (owners often differ across servers without being meaningful drift). Strict forces it on.</summary>
+    public bool EnforceOwnership { get; init; }
 
     /// <summary>Default parallelism: 50% of logical processors (at least 1).</summary>
     public int Threads { get; init; } = DefaultThreads;
@@ -49,6 +55,7 @@ public sealed record VerifyOptions
             Depth = VerifyDepth.Full,
             HashAlgorithm = FileDriftHashAlgorithm.SHA256,
             IncludeAcl = true,
+            EnforceOwnership = true,
         }
         : this;
 }

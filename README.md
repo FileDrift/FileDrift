@@ -89,6 +89,12 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.3.0 (2026-06-23)
+- **Explicit-permission ACL comparison** — Compare ACLs now compares only **explicit (non-inherited)** permissions on both files and directories, ignoring inherited ACEs (which differ structurally between two server roots). This turns a cross-server compare from "everything differs" into a short list of deliberate permission drift. The report shows both directions: source permissions **missing on the destination** and destination explicit permissions that **differ from the source**.
+- **Directory enumeration under ACL mode** — folders are enumerated and compared when Compare ACLs is on (explicit permissions usually live on folders and inherit down).
+- **Additive ACL reconcile** — Reconcile adds the source's missing explicit ACEs to the destination, **preserving** the destination's own permissions and inheritance (never strips them — the destination may be a live target). Missing folders are created.
+- **Enforce ownership** (optional, off by default) — also require/copy the owner. Strict mode forces it on. CLI: `--enforce-ownership`.
+
 ### 0.2.0 (2026-06-23)
 - **Date range filter** — replaced the single "As of" cutoff with **Start** and **End** dates (on last-modified). Start is symmetric (ignores files older than it on both sides — for consolidating into a destination with existing older content); End is asymmetric (excludes only newer destination-only files, so a migrated file edited later still compares as different rather than going missing). CLI: `--start` / `--end`.
 - **ACL reconciliation** — Reconcile now also copies permissions (owner/group/DACL) when the verify compared ACLs; an ACL-only difference is fixed without rewriting the file.

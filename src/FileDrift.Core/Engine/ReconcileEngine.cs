@@ -13,12 +13,14 @@ public sealed class ReconcileEngine
 
     private readonly AclWriter _aclWriter = new();
 
-    /// <summary>Builds the copy plan from comparison results. Pure (no I/O) — safe for preview.
-    /// Acts only on MissingAtDest (copy) and Different (overwrite); directories and Extra/Matched
-    /// entries are ignored. When <paramref name="includeAcls"/> is set, also copies the source's
-    /// permissions (SDDL) so destination ACLs match — and an ACL-only difference is fixed without
-    /// rewriting the file's bytes.</summary>
-    public static ReconcilePlan BuildPlan(IEnumerable<ComparisonResult> comparisons, string destRoot, bool includeAcls = false)
+    /// <summary>Builds the reconcile plan from comparison results. Pure (no I/O) — safe for preview.
+    /// Copies missing files, overwrites content-different files, and creates missing folders. When
+    /// <paramref name="includeAcls"/> is set, additively applies the source's explicit (non-inherited)
+    /// ACEs that the destination lacks — never removing the destination's own permissions. When
+    /// <paramref name="enforceOwnership"/> is set, also sets the source owner where it differs.</summary>
+    public static ReconcilePlan BuildPlan(
+        IEnumerable<ComparisonResult> comparisons, string destRoot,
+        bool includeAcls = false, bool enforceOwnership = false)
     {
         var actions = new List<ReconcileAction>();
 
@@ -26,25 +28,42 @@ public sealed class ReconcileEngine
         {
             switch (c.Status)
             {
-                case ComparisonStatus.MissingAtDest when c.Source is { IsDirectory: false } s:
+                case ComparisonStatus.MissingAtDest when c.Source is { } s:
+                {
+                    var aces = includeAcls ? AclModel.ExplicitAces(s.SecurityDescriptor).ToArray() : [];
                     actions.Add(new ReconcileAction
                     {
                         RelativePath = c.RelativePath,
                         SourceFullPath = s.FullPath,
                         DestFullPath = Path.Combine(destRoot, c.RelativePath),
                         Kind = ReconcileActionKind.Copy,
-                        SizeBytes = s.SizeBytes,
+                        SizeBytes = s.IsDirectory ? 0 : s.SizeBytes,
                         ClobbersNewer = false,
-                        CopyContent = true,
-                        ApplyAclSddl = includeAcls ? s.SecurityDescriptor : null, // new file → match source ACL
+                        CopyContent = !s.IsDirectory,
+                        CreateDirectory = s.IsDirectory,
+                        AddExplicitAces = aces.Length > 0 ? aces : null,
+                        SetOwnerSid = enforceOwnership ? AclModel.Owner(s.SecurityDescriptor) : null,
                     });
                     break;
+                }
 
-                case ComparisonStatus.Different when c.Source is { IsDirectory: false } s && c.Dest is { } d:
-                    bool contentDiffers = (c.Differences & ContentDifferences) != 0;
-                    bool aclDiffers = includeAcls && (c.Differences & FileDifference.Acl) != 0 && s.SecurityDescriptor is not null;
-                    if (!contentDiffers && !aclDiffers)
-                        break; // nothing actionable (e.g. ACL-only diff but ACL reconciliation off)
+                case ComparisonStatus.Different when c.Source is { } s && c.Dest is { } d:
+                {
+                    bool contentDiffers = !s.IsDirectory && (c.Differences & ContentDifferences) != 0;
+
+                    IReadOnlyList<string>? addAces = null;
+                    string? setOwner = null;
+                    if (includeAcls && (c.Differences & FileDifference.Acl) != 0)
+                    {
+                        var delta = AclModel.CompareExplicit(s.SecurityDescriptor, d.SecurityDescriptor);
+                        if (delta.DestMissing.Count > 0) addAces = delta.DestMissing; // additive: only what dest lacks
+                        if (enforceOwnership &&
+                            !string.Equals(AclModel.Owner(s.SecurityDescriptor), AclModel.Owner(d.SecurityDescriptor), StringComparison.OrdinalIgnoreCase))
+                            setOwner = AclModel.Owner(s.SecurityDescriptor);
+                    }
+
+                    if (!contentDiffers && addAces is null && setOwner is null)
+                        break; // e.g. only dest-EXTRA explicit ACEs — reported, never removed
 
                     actions.Add(new ReconcileAction
                     {
@@ -52,22 +71,25 @@ public sealed class ReconcileEngine
                         SourceFullPath = s.FullPath,
                         DestFullPath = d.FullPath,
                         Kind = ReconcileActionKind.Overwrite,
-                        SizeBytes = s.SizeBytes,
-                        ClobbersNewer = d.LastWriteTimeUtc > s.LastWriteTimeUtc,
+                        SizeBytes = contentDiffers ? s.SizeBytes : 0,
+                        ClobbersNewer = contentDiffers && d.LastWriteTimeUtc > s.LastWriteTimeUtc,
                         CopyContent = contentDiffers,
-                        ApplyAclSddl = aclDiffers ? s.SecurityDescriptor : null,
+                        AddExplicitAces = addAces,
+                        SetOwnerSid = setOwner,
                     });
                     break;
+                }
             }
         }
 
         return new ReconcilePlan
         {
             Actions = actions,
-            CopyCount = actions.Count(a => a.Kind == ReconcileActionKind.Copy),
-            OverwriteCount = actions.Count(a => a.Kind == ReconcileActionKind.Overwrite),
+            CopyCount = actions.Count(a => a.CopyContent && a.Kind == ReconcileActionKind.Copy),
+            OverwriteCount = actions.Count(a => a.CopyContent && a.Kind == ReconcileActionKind.Overwrite),
+            DirCreateCount = actions.Count(a => a.CreateDirectory),
             ClobberCount = actions.Count(a => a.ClobbersNewer),
-            AclCount = actions.Count(a => a.ApplyAclSddl is not null),
+            AclCount = actions.Count(a => a.TouchesAcl),
             TotalBytes = actions.Where(a => a.CopyContent).Sum(a => a.SizeBytes),
         };
     }
@@ -85,7 +107,7 @@ public sealed class ReconcileEngine
         CancellationToken cancellationToken = default)
     {
         var connections = new List<IDisposable>();
-        int copied = 0, overwritten = 0, aclsApplied = 0;
+        int copied = 0, overwritten = 0, aclsApplied = 0, dirsCreated = 0;
         long bytes = 0;
         var failures = new List<ReconcileFailure>();
 
@@ -103,6 +125,12 @@ public sealed class ReconcileEngine
                 n++;
                 try
                 {
+                    if (a.CreateDirectory)
+                    {
+                        Directory.CreateDirectory(a.DestFullPath);
+                        dirsCreated++;
+                    }
+
                     if (a.CopyContent)
                     {
                         await CopyFileAsync(a.SourceFullPath, a.DestFullPath, cancellationToken);
@@ -110,12 +138,20 @@ public sealed class ReconcileEngine
                         bytes += a.SizeBytes;
                     }
 
-                    if (a.ApplyAclSddl is { } sddl)
+                    bool aclTouched = false;
+                    if (a.AddExplicitAces is { Count: > 0 } aces)
                     {
-                        var aclError = _aclWriter.TryApplySddl(a.DestFullPath, sddl);
-                        if (aclError is null) aclsApplied++;
-                        else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"ACL: {aclError}" });
+                        var err = _aclWriter.TryApplyExplicitAces(a.DestFullPath, aces);
+                        if (err is null) aclTouched = true;
+                        else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"ACL: {err}" });
                     }
+                    if (a.SetOwnerSid is { } owner)
+                    {
+                        var err = _aclWriter.TrySetOwner(a.DestFullPath, owner);
+                        if (err is null) aclTouched = true;
+                        else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"owner: {err}" });
+                    }
+                    if (aclTouched) aclsApplied++;
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -147,18 +183,29 @@ public sealed class ReconcileEngine
             Overwritten = overwritten,
             BytesCopied = bytes,
             AclsApplied = aclsApplied,
+            DirectoriesCreated = dirsCreated,
             Failures = failures,
         };
     }
 
     /// <summary>Describes what an action does, for progress/log display.</summary>
-    public static string ActionVerb(ReconcileAction a) => (a.CopyContent, a.ApplyAclSddl is not null) switch
+    public static string ActionVerb(ReconcileAction a)
     {
-        (true, true) => a.Kind == ReconcileActionKind.Copy ? "Copy+ACL" : "Overwrite+ACL",
-        (true, false) => a.Kind == ReconcileActionKind.Copy ? "Copy" : "Overwrite",
-        (false, true) => "Set ACL",
-        _ => "Skip",
-    };
+        var verb = a switch
+        {
+            { CreateDirectory: true } => "Create dir",
+            { CopyContent: true, Kind: ReconcileActionKind.Copy } => "Copy",
+            { CopyContent: true } => "Overwrite",
+            _ => null,
+        };
+        return (verb, a.TouchesAcl) switch
+        {
+            (null, true) => "Set ACL",
+            (not null, true) => verb + "+ACL",
+            (not null, false) => verb!,
+            _ => "Skip",
+        };
+    }
 
     private static async Task CopyFileAsync(string source, string dest, CancellationToken ct)
     {

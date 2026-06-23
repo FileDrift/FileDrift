@@ -11,7 +11,8 @@ internal static class VerifyCommand
         var dst     = new Option<string>("--dst")   { Description = "Destination path (local or UNC)", Required = true };
         var depth   = new Option<string>("--depth") { Description = "quick | standard | full (default: standard)" };
         var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: md5, full depth only)" };
-        var acl     = new Option<bool>("--acl")     { Description = "Include ACL comparison" };
+        var acl     = new Option<bool>("--acl")     { Description = "Compare explicit (non-inherited) permissions on files and folders" };
+        var ownAcl  = new Option<bool>("--enforce-ownership") { Description = "With --acl, also require the owner to match" };
         var threads = new Option<int>("--threads")  { Description = "Parallel threads (default: 8)" };
         var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
         var credDst = new Option<string>("--cred-dest")   { Description = "Saved credential target name for the destination share" };
@@ -22,7 +23,7 @@ internal static class VerifyCommand
         var all     = new Option<bool>("--all")     { Description = "Include matched files in the differences array (default: differences only)" };
 
         var cmd = new Command("verify", "Compare source and destination trees and report differences");
-        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, start, end, all })
+        foreach (var o in new Option[] { src, dst, depth, hash, acl, ownAcl, threads, credSrc, credDst, exclude, strict, start, end, all })
             cmd.Add(o);
 
         cmd.SetAction(async (parseResult, ct) =>
@@ -37,6 +38,7 @@ internal static class VerifyCommand
                     Depth = ParseDepth(parseResult.GetValue(depth)),
                     HashAlgorithm = ParseHash(parseResult.GetValue(hash)),
                     IncludeAcl = parseResult.GetValue(acl),
+                    EnforceOwnership = parseResult.GetValue(ownAcl),
                     Threads = parseResult.GetValue(threads) is int t && t > 0 ? t : VerifyOptions.DefaultThreads,
                     ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
@@ -77,6 +79,7 @@ internal static class VerifyCommand
                         depth = run.Options.Depth,
                         hashAlgorithm = run.Options.HashAlgorithm,
                         includeAcl = run.Options.IncludeAcl,
+                        enforceOwnership = run.Options.EnforceOwnership,
                         threads = run.Options.Threads,
                         strict = run.Options.Strict,
                         startUtc = run.Options.StartUtc,

@@ -25,9 +25,18 @@ public sealed class ReconcileAction
     /// <summary>Whether the file's bytes are (re)written. False for an ACL-only fix.</summary>
     public bool CopyContent { get; init; } = true;
 
-    /// <summary>When non-null, the source SDDL to apply to the destination after copying
-    /// (so permissions match). Null when ACL reconciliation is off or not needed.</summary>
-    public string? ApplyAclSddl { get; init; }
+    /// <summary>Create the destination directory first (for a missing source folder).</summary>
+    public bool CreateDirectory { get; init; }
+
+    /// <summary>Explicit (non-inherited) source ACE bodies to ensure on the destination, merged with
+    /// the destination's existing explicit ACEs (additive). Null/empty when no ACL change is needed.</summary>
+    public IReadOnlyList<string>? AddExplicitAces { get; init; }
+
+    /// <summary>Source owner SID to apply to the destination (only when owner enforcement is on
+    /// and the owner differs). Null otherwise.</summary>
+    public string? SetOwnerSid { get; init; }
+
+    public bool TouchesAcl => (AddExplicitAces is { Count: > 0 }) || SetOwnerSid is not null;
 }
 
 /// <summary>The full set of planned reconcile actions, derived from a comparison result set.
@@ -38,6 +47,8 @@ public sealed class ReconcilePlan
 
     public int CopyCount { get; init; }
     public int OverwriteCount { get; init; }
+    /// <summary>How many missing source folders will be created on the destination.</summary>
+    public int DirCreateCount { get; init; }
     /// <summary>How many of the overwrites replace a newer destination file.</summary>
     public int ClobberCount { get; init; }
     /// <summary>How many actions also (or only) apply the source's permissions to the destination.</summary>
@@ -68,8 +79,11 @@ public sealed class ReconcileResult
     public required long BytesCopied { get; init; }
     public required IReadOnlyList<ReconcileFailure> Failures { get; init; }
 
-    /// <summary>How many destination files had their permissions (ACL) set from the source.</summary>
+    /// <summary>How many destination entries had permissions (ACL/owner) applied from the source.</summary>
     public int AclsApplied { get; init; }
+
+    /// <summary>How many missing destination folders were created.</summary>
+    public int DirectoriesCreated { get; init; }
 
     public int FailureCount => Failures.Count;
 }

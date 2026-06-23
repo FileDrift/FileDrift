@@ -12,6 +12,7 @@ internal static class AclMethods
     internal const uint OwnerSecurityInformation = 0x00000001;
     internal const uint GroupSecurityInformation = 0x00000002;
     internal const uint DaclSecurityInformation  = 0x00000004;
+    internal const uint UnprotectedDaclSecurityInformation = 0x20000000; // allow inheritance to propagate
 
     internal const int  ErrorSuccess = 0;
     internal const int  ErrorPrivilegeNotHeld = 1314; // SetNamedSecurityInfo owner/group needs privilege

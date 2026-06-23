@@ -23,7 +23,9 @@ public sealed class SmartFileEnumerator : IFileEnumerator
         IProgress<EnumerationProgress>? progress = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (IsLocalNtfs(rootPath))
+        // MFT enumeration is files-only; ACL comparison needs directory records (and is I/O-bound on
+        // ACL reads anyway), so fall back to the directory-aware SMB scanner when comparing ACLs.
+        if (!options.IncludeAcl && IsLocalNtfs(rootPath))
         {
             _lastSource = EnumerationSource.Mft;
             IAsyncEnumerable<FileRecord>? mftResult = null;
