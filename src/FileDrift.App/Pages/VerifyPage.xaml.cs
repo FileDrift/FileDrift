@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Net;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,12 +11,15 @@ namespace FileDrift.App.Pages;
 
 public partial class VerifyPage : Page
 {
+    /// <summary>Cap on rows shown in the results grid. Differences only — matched files are summarised
+    /// by the count tile, never listed (1M+ rows would freeze the grid).</summary>
+    private const int MaxGridRows = 100_000;
+
     private readonly SmartFileEnumerator _enumerator = new();
     private readonly VerifyEngine _engine;
     private readonly PreflightEngine _preflight;
     private readonly ReconcileEngine _reconcile = new();
     private readonly ICredentialStore _credentials = new WindowsCredentialStore();
-    private readonly ObservableCollection<ComparisonRow> _rows = new();
     private CancellationTokenSource? _cts;
     private bool _hasDefaultCredential;
 
@@ -31,7 +33,6 @@ public partial class VerifyPage : Page
         InitializeComponent();
         _engine = new VerifyEngine(_enumerator, new SqliteRunRepository());
         _preflight = new PreflightEngine(_enumerator);
-        ResultsGrid.ItemsSource = _rows;
         Loaded += OnLoaded;
         UpdateModeReadout();
     }
@@ -220,7 +221,7 @@ public partial class VerifyPage : Page
 
         _cts = new CancellationTokenSource();
         SetRunning(true);
-        _rows.Clear();
+        ResultsGrid.ItemsSource = null;
         ResetSummary();
         ClearLog();
         AppendLog($"Starting verify ({DescribeOptions(options)})");
@@ -231,7 +232,14 @@ public partial class VerifyPage : Page
         try
         {
             var result = await Task.Run(() => _engine.RunAsync(src, dst, options, srcCred, dstCred, progress, _cts.Token));
-            ShowResult(result);
+            // Project the grid rows off the UI thread: differences only, sorted, capped.
+            var rows = await Task.Run(() => result.Comparisons
+                .Where(c => c.Status != ComparisonStatus.Matched)
+                .OrderBy(c => c.RelativePath, StringComparer.OrdinalIgnoreCase)
+                .Take(MaxGridRows)
+                .Select(ComparisonRow.From)
+                .ToList());
+            ShowResult(result, rows);
             _lastResult = result;
             _lastSrc = src; _lastDst = dst;
             _lastSrcCred = srcCred; _lastDstCred = dstCred;
@@ -327,7 +335,7 @@ public partial class VerifyPage : Page
     private void OnProgress(VerifyProgress p)
     {
         var message = p.Message ?? p.Phase.ToString();
-        StatusText.Text = message;
+        StatusText.Text = message; // always current, even when the log line is throttled
 
         if (p.Total > 0)
         {
@@ -339,6 +347,13 @@ public partial class VerifyPage : Page
             ProgressBar.IsIndeterminate = true;
         }
 
+        // Throttle the high-frequency scanning lines so a large share can't flood the UI thread
+        // with thousands of ListBox appends; always log the first line of each new phase.
+        bool phaseChanged = p.Phase != _lastProgressPhase;
+        _lastProgressPhase = p.Phase;
+        if (!phaseChanged && DateTime.UtcNow - _lastLogAppendUtc < LogThrottle)
+            return;
+
         AppendLog(p.Phase switch
         {
             VerifyPhase.EnumeratingSource => $"Source · {message}",
@@ -349,12 +364,16 @@ public partial class VerifyPage : Page
 
     // ── activity log ──
 
+    private static readonly TimeSpan LogThrottle = TimeSpan.FromMilliseconds(200);
     private string? _lastLogged;
+    private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
+    private DateTime _lastLogAppendUtc = DateTime.MinValue;
 
     private void AppendLog(string line)
     {
         if (line == _lastLogged) return; // collapse consecutive duplicates
         _lastLogged = line;
+        _lastLogAppendUtc = DateTime.UtcNow;
 
         ActivityLog.Items.Add($"{DateTime.Now:HH:mm:ss}  {line}");
         while (ActivityLog.Items.Count > 1000)
@@ -473,7 +492,7 @@ public partial class VerifyPage : Page
         finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
-    private void ShowResult(VerifyResult result)
+    private void ShowResult(VerifyResult result, List<ComparisonRow> rows)
     {
         var run = result.Run;
         ProgressBar.IsIndeterminate = false;
@@ -484,12 +503,8 @@ public partial class VerifyPage : Page
         MissingText.Text = run.MissingAtDestCount.ToString("N0");
         ExtraText.Text = run.ExtraAtDestCount.ToString("N0");
 
-        foreach (var c in result.Comparisons
-                     .OrderBy(c => c.Status == ComparisonStatus.Matched)
-                     .ThenBy(c => c.RelativePath, StringComparer.OrdinalIgnoreCase))
-        {
-            _rows.Add(ComparisonRow.From(c));
-        }
+        // Differences only — matched files live in the count tile, never the grid.
+        ResultsGrid.ItemsSource = rows;
 
         var mode = _enumerator.Source == EnumerationSource.Mft ? "MFT" : "SMB";
         var summary =
@@ -497,6 +512,8 @@ public partial class VerifyPage : Page
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest files.";
         if (result.ExcludedNewerCount > 0)
             summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
+        if (run.TotalDifferences > rows.Count)
+            summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences.)";
         StatusText.Text = summary;
         AppendLog(summary);
     }

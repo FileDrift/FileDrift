@@ -170,13 +170,9 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="0,0,0,3">
-                <ui:TextBlock Text="Activity" FontTypography="BodyStrong" FontSize="12" VerticalAlignment="Center" />
-                <ui:Button x:Name="CopyLogButton" Content="Copy" HorizontalAlignment="Right"
-                           Icon="{ui:SymbolIcon Copy24}" Padding="8,3" FontSize="11"
-                           Click="OnCopyLogClick" ToolTip="Copy activity log to clipboard" />
-            </Grid>
+            <ui:TextBlock Grid.Row="0" Text="Activity" FontTypography="BodyStrong" FontSize="12" Margin="0,0,0,3" />
             <Border Grid.Row="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="6">
                 <ListBox x:Name="ActivityLog" Height="80" BorderThickness="0"
                          FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11"
@@ -191,6 +187,9 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </Border>
+            <ui:Button Grid.Row="2" x:Name="CopyLogButton" Content="Copy activity log" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Copy24}" Margin="0,6,0,0" HorizontalAlignment="Left"
+                       Click="OnCopyLogClick" ToolTip="Copy the full activity log to the clipboard" />
         </Grid>
 
         <!-- Results -->
