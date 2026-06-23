@@ -118,6 +118,13 @@
                            Icon="{ui:SymbolIcon Play24}" Click="OnVerifyClick" />
                 <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0"
                            Icon="{ui:SymbolIcon Stop24}" Click="OnCancelClick" Visibility="Collapsed" />
+                <Border Width="1" Margin="12,2,12,2" Background="{DynamicResource ControlElevationBorderBrush}" />
+                <ui:Button x:Name="PreviewButton" Content="Preview" IsEnabled="False"
+                           Icon="{ui:SymbolIcon Eye24}" Click="OnPreviewClick"
+                           ToolTip="List what Reconcile would copy/overwrite, without changing anything" />
+                <ui:Button x:Name="ReconcileButton" Content="Reconcile" Margin="8,0,0,0" IsEnabled="False"
+                           Icon="{ui:SymbolIcon ArrowSync24}" Click="OnReconcileClick"
+                           ToolTip="Copy source→destination to fix missing and different files. Source is the source of truth; nothing is deleted." />
             </StackPanel>
             <ui:TextBlock x:Name="ModeText" HorizontalAlignment="Right" VerticalAlignment="Center"
                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />

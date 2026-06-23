@@ -15,10 +15,16 @@ public partial class VerifyPage : Page
     private readonly SmartFileEnumerator _enumerator = new();
     private readonly VerifyEngine _engine;
     private readonly PreflightEngine _preflight;
+    private readonly ReconcileEngine _reconcile = new();
     private readonly ICredentialStore _credentials = new WindowsCredentialStore();
     private readonly ObservableCollection<ComparisonRow> _rows = new();
     private CancellationTokenSource? _cts;
     private bool _hasDefaultCredential;
+
+    // Context of the last completed verify, so Reconcile/Preview can act on it.
+    private VerifyResult? _lastResult;
+    private string _lastSrc = "", _lastDst = "";
+    private NetworkCredential? _lastSrcCred, _lastDstCred;
 
     public VerifyPage()
     {
@@ -217,6 +223,9 @@ public partial class VerifyPage : Page
         {
             var result = await Task.Run(() => _engine.RunAsync(src, dst, options, srcCred, dstCred, progress, _cts.Token));
             ShowResult(result);
+            _lastResult = result;
+            _lastSrc = src; _lastDst = dst;
+            _lastSrcCred = srcCred; _lastDstCred = dstCred;
         }
         catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
         catch (Exception ex)
@@ -357,6 +366,104 @@ public partial class VerifyPage : Page
         Clipboard.SetText(text);
     }
 
+    // ── reconcile ──
+
+    private ReconcilePlan? BuildPlanOrNull()
+    {
+        if (_lastResult is not { } r) return null;
+        var plan = ReconcileEngine.BuildPlan(r.Comparisons, _lastDst);
+        return plan.TotalActions == 0 ? null : plan;
+    }
+
+    private void OnPreviewClick(object sender, RoutedEventArgs e)
+    {
+        if (BuildPlanOrNull() is not { } plan)
+        {
+            StatusText.Text = "Nothing to reconcile — no missing or different files.";
+            return;
+        }
+
+        AppendLog($"── Preview: {plan.CopyCount:N0} to copy, {plan.OverwriteCount:N0} to overwrite" +
+                  $"{(plan.ClobberCount > 0 ? $" ({plan.ClobberCount:N0} newer at dest)" : "")}, {FormatSize(plan.TotalBytes)} total ──");
+        foreach (var a in plan.Actions)
+        {
+            var verb = a.Kind == ReconcileActionKind.Copy ? "copy     " : "overwrite";
+            var warn = a.ClobbersNewer ? "  ⚠ dest newer" : "";
+            AppendLog($"[preview] {verb} {a.RelativePath}  ({FormatSize(a.SizeBytes)}){warn}");
+        }
+        StatusText.Text = $"Preview: would copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0} " +
+                          $"({FormatSize(plan.TotalBytes)}). No changes made.";
+    }
+
+    private async void OnReconcileClick(object sender, RoutedEventArgs e)
+    {
+        if (BuildPlanOrNull() is not { } plan)
+        {
+            StatusText.Text = "Nothing to reconcile — no missing or different files.";
+            return;
+        }
+
+        var msg = $"Reconcile will copy source → destination:\n\n" +
+                  $"    • Copy {plan.CopyCount:N0} missing file(s)\n" +
+                  $"    • Overwrite {plan.OverwriteCount:N0} differing file(s)\n\n" +
+                  $"Total to write: {FormatSize(plan.TotalBytes)}.\n" +
+                  $"The source is the source of truth — nothing on the destination is deleted.";
+        if (plan.ClobberCount > 0)
+            msg += $"\n\n⚠ WARNING: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
+                   $"NEWER than the source. Their newer content will be lost.";
+        msg += "\n\nProceed?";
+
+        var choice = MessageBox.Show(msg, "Confirm Reconcile",
+            MessageBoxButton.YesNo,
+            plan.ClobberCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question,
+            MessageBoxResult.No);
+        if (choice != MessageBoxResult.Yes) return;
+
+        _cts = new CancellationTokenSource();
+        SetRunning(true);
+        ClearLog();
+        AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +
+                  $"({FormatSize(plan.TotalBytes)}) source → destination");
+
+        var progress = new Progress<ReconcileProgress>(p =>
+        {
+            if (p.Total > 0)
+            {
+                ProgressBar.IsIndeterminate = false;
+                ProgressBar.Value = Math.Min(100, p.Processed * 100.0 / p.Total);
+            }
+            StatusText.Text = $"Reconciling {p.Processed:N0}/{p.Total:N0}…";
+            if (p.Message is { } m) AppendLog(m);
+        });
+
+        try
+        {
+            var result = await Task.Run(() => _reconcile.ExecuteAsync(
+                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token));
+
+            ProgressBar.Value = 100;
+            var summary = $"Reconcile done — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
+                          $"{FormatSize(result.BytesCopied)} written" +
+                          (result.FailureCount > 0 ? $", {result.FailureCount:N0} failed." : ".");
+            StatusText.Text = summary;
+            AppendLog(summary);
+            foreach (var f in result.Failures)
+                AppendLog($"[FAILED] {f.RelativePath} — {f.Error}");
+
+            // Destination changed; require a fresh verify before reconciling again.
+            _lastResult = null;
+            AppendLog("Re-run Verify to confirm the destination now matches.");
+        }
+        catch (OperationCanceledException) { StatusText.Text = "Reconcile cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
+        catch (Exception ex)
+        {
+            var m = $"Reconcile error: {ex.GetType().Name} — {ex.Message}";
+            StatusText.Text = m;
+            AppendLog(m);
+        }
+        finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
+    }
+
     private void ShowResult(VerifyResult result)
     {
         var run = result.Run;
@@ -398,9 +505,26 @@ public partial class VerifyPage : Page
         PreflightButton.IsEnabled = !running;
         SourceBox.IsEnabled = DestBox.IsEnabled = DepthBox.IsEnabled = HashBox.IsEnabled =
             AclSwitch.IsEnabled = ThreadsBox.IsEnabled = ExcludeBox.IsEnabled =
-            StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled = !running;
+            StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled =
+            AsOfBox.IsEnabled = !running;
 
-        if (!running) ApplyStrictState(); // restore forced/disabled controls if Strict is on
+        if (running)
+        {
+            PreviewButton.IsEnabled = ReconcileButton.IsEnabled = false;
+        }
+        else
+        {
+            ApplyStrictState();      // restore forced/disabled controls if Strict is on
+            UpdateReconcileState();  // re-enable Reconcile/Preview if the last verify is actionable
+        }
+    }
+
+    /// <summary>Enables Preview/Reconcile when the last completed verify has files to copy or overwrite.</summary>
+    private void UpdateReconcileState()
+    {
+        bool actionable = _lastResult is { } r &&
+            r.Run.MissingAtDestCount + r.Run.DifferentCount > 0;
+        PreviewButton.IsEnabled = ReconcileButton.IsEnabled = actionable;
     }
 
     private static string Bytes(long? bytes) => bytes is { } b ? FormatSize(b) : "?";
