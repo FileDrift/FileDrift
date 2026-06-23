@@ -115,16 +115,25 @@ public partial class VerifyPage : Page
 
     // ── input events ──
 
+    // These fire on every keystroke with arbitrary partial path text; never let one crash the app.
     private void OnSourceChanged(object sender, TextChangedEventArgs e)
     {
-        AutoSelectCredential(SourceCredBox, SourceBox.Text);
-        UpdateModeReadout();
+        try
+        {
+            AutoSelectCredential(SourceCredBox, SourceBox.Text);
+            UpdateModeReadout();
+        }
+        catch { /* partial/malformed path mid-type — ignore until it parses */ }
     }
 
     private void OnDestChanged(object sender, TextChangedEventArgs e)
     {
-        AutoSelectCredential(DestCredBox, DestBox.Text);
-        UpdateModeReadout();
+        try
+        {
+            AutoSelectCredential(DestCredBox, DestBox.Text);
+            UpdateModeReadout();
+        }
+        catch { /* partial/malformed path mid-type — ignore until it parses */ }
     }
 
     private void OnDepthChanged(object sender, SelectionChangedEventArgs e) => UpdateHashVisibility();
