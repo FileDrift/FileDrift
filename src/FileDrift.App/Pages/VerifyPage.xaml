@@ -93,11 +93,18 @@
                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" FontSize="12" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
                         ToolTip="Comma-separated wildcard patterns to skip. * and ? are supported, matched against file name or relative path. Example: *.tmp, ~$*, logs\*">
                 <ui:TextBlock Text="Exclude" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <ui:TextBox x:Name="ExcludeBox" Width="200" PlaceholderText="*.tmp, ~$*  (comma-separated)" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
+                        ToolTip="Optional cutoff. Destination files modified AFTER this date that have no source match (post-migration additions) are excluded from the report. Files present on both sides are always compared. Leave blank to compare everything.">
+                <ui:TextBlock Text="As of" VerticalAlignment="Center" Margin="0,0,6,0"
+                              Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <DatePicker x:Name="AsOfBox" Width="130" />
             </StackPanel>
         </WrapPanel>
 

@@ -181,6 +181,7 @@ public partial class VerifyPage : Page
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         Strict = StrictSwitch.IsChecked == true,
+        AsOfUtc = AsOfBox.SelectedDate is { } d ? VerifyOptions.EndOfLocalDayUtc(d) : null,
     };
 
     // ── actions ──
@@ -378,6 +379,8 @@ public partial class VerifyPage : Page
         var summary =
             $"Done ({mode}) — {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest files.";
+        if (result.ExcludedNewerCount > 0)
+            summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
         StatusText.Text = summary;
         AppendLog(summary);
     }

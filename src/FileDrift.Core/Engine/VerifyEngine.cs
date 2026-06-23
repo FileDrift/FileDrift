@@ -77,6 +77,29 @@ public sealed class VerifyEngine
             var comparer = options.Strict ? new ComparisonEngine(TimeSpan.Zero) : _comparison;
             var comparisons = comparer.Compare(source.Values.ToArray(), dest.Values.ToArray(), options);
 
+            // As-of cutoff: drop destination-only files newer than the cutoff (post-migration noise).
+            // Files present on both sides are kept and compared regardless of age.
+            long excludedNewer = 0;
+            if (options.AsOfUtc is { } cutoff)
+            {
+                var kept = new List<ComparisonResult>(comparisons.Count);
+                foreach (var c in comparisons)
+                {
+                    if (c.Status == ComparisonStatus.ExtraAtDest && c.Dest is { } d && d.LastWriteTimeUtc > cutoff)
+                    {
+                        excludedNewer++;
+                        continue;
+                    }
+                    kept.Add(c);
+                }
+                comparisons = kept;
+                progress?.Report(new VerifyProgress
+                {
+                    Phase = VerifyPhase.Comparing,
+                    Message = $"Excluded {excludedNewer:N0} newer destination files (as-of {cutoff.ToLocalTime():yyyy-MM-dd})",
+                });
+            }
+
             Tally(run, comparisons);
 
             // Phase 5 — persist completed run
@@ -93,7 +116,7 @@ public sealed class VerifyEngine
                 Message = $"Done — {run.MatchedCount} matched, {run.TotalDifferences} differences",
             });
 
-            return new VerifyResult { Run = run, Comparisons = comparisons };
+            return new VerifyResult { Run = run, Comparisons = comparisons, ExcludedNewerCount = excludedNewer };
         }
         catch (OperationCanceledException)
         {

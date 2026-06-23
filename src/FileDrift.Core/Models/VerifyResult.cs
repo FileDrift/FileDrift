@@ -7,4 +7,8 @@ public sealed class VerifyResult
 {
     public required RunRecord Run { get; init; }
     public required IReadOnlyList<ComparisonResult> Comparisons { get; init; }
+
+    /// <summary>Number of destination-only files excluded by the as-of cutoff (newer than
+    /// <see cref="VerifyOptions.AsOfUtc"/> with no source counterpart). Zero when no cutoff is set.</summary>
+    public long ExcludedNewerCount { get; init; }
 }

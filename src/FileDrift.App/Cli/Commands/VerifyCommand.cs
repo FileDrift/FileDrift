@@ -17,10 +17,11 @@ internal static class VerifyCommand
         var credDst = new Option<string>("--cred-dest")   { Description = "Saved credential target name for the destination share" };
         var exclude = new Option<string>("--exclude") { Description = "Comma-separated glob patterns to exclude (e.g. \"*.tmp,~$*\")" };
         var strict  = new Option<bool>("--strict")  { Description = "Exact match: forces full depth, SHA-256, ACLs, and zero timestamp tolerance" };
+        var asOf    = new Option<string>("--as-of") { Description = "Cutoff date (yyyy-MM-dd). Excludes destination-only files modified after this date from the report" };
         var all     = new Option<bool>("--all")     { Description = "Include matched files in the differences array (default: differences only)" };
 
         var cmd = new Command("verify", "Compare source and destination trees and report differences");
-        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, all })
+        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, asOf, all })
             cmd.Add(o);
 
         cmd.SetAction(async (parseResult, ct) =>
@@ -39,6 +40,7 @@ internal static class VerifyCommand
                     ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     Strict = parseResult.GetValue(strict),
+                    AsOfUtc = ParseAsOf(parseResult.GetValue(asOf)),
                 };
 
                 var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
@@ -75,6 +77,7 @@ internal static class VerifyCommand
                         includeAcl = run.Options.IncludeAcl,
                         threads = run.Options.Threads,
                         strict = run.Options.Strict,
+                        asOfUtc = run.Options.AsOfUtc,
                     },
                     summary = new
                     {
@@ -84,6 +87,7 @@ internal static class VerifyCommand
                         different = run.DifferentCount,
                         missingAtDest = run.MissingAtDestCount,
                         extraAtDest = run.ExtraAtDestCount,
+                        excludedNewer = result.ExcludedNewerCount,
                     },
                     differences = rows,
                 });
@@ -106,6 +110,15 @@ internal static class VerifyCommand
         null or "" or "standard" => VerifyDepth.Standard,
         _ => throw new ArgumentException($"Unknown depth '{value}'. Use quick, standard, or full."),
     };
+
+    private static DateTime? ParseAsOf(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!DateTime.TryParse(value, System.Globalization.CultureInfo.CurrentCulture,
+                System.Globalization.DateTimeStyles.None, out var date))
+            throw new ArgumentException($"Unknown date '{value}'. Use a format like 2026-02-06.");
+        return VerifyOptions.EndOfLocalDayUtc(date);
+    }
 
     private static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch
     {
