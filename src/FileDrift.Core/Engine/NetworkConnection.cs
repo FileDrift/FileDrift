@@ -27,10 +27,20 @@ public sealed class NetworkConnection : IDisposable
             : $"{credential.Domain}\\{credential.UserName}";
 
         int result = NetworkMethods.WNetAddConnection2(ref resource, credential.Password, user, 0);
-        if (result != NetworkMethods.NoError)
+        if (result == NetworkMethods.NoError)
+        {
+            _connected = true; // we own this session; tear it down on dispose
+        }
+        else if (result == NetworkMethods.ErrorSessionCredentialConflict)
+        {
+            // A Kerberos/domain session to this server already exists.  That session will
+            // serve the enumeration — no need to establish a new one or cancel on dispose.
+            _connected = false;
+        }
+        else
+        {
             throw new Win32Exception(result, $"Could not connect to {shareRoot} as '{user}'.");
-
-        _connected = true;
+        }
     }
 
     public void Dispose()

@@ -6,6 +6,7 @@ internal static class NetworkMethods
 {
     internal const int ResourceTypeDisk = 0x00000001;
     internal const int NoError = 0;
+    internal const int ErrorSessionCredentialConflict = 1219; // existing Kerberos/domain session
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct NetResource

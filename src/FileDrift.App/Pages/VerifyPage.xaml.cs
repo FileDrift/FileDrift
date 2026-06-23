@@ -349,6 +349,13 @@ public partial class VerifyPage : Page
         _lastLogged = null;
     }
 
+    private void OnCopyLogClick(object sender, RoutedEventArgs e)
+    {
+        if (ActivityLog.Items.Count == 0) return;
+        var text = string.Join(Environment.NewLine, ActivityLog.Items.Cast<string>());
+        Clipboard.SetText(text);
+    }
+
     private void ShowResult(VerifyResult result)
     {
         var run = result.Run;

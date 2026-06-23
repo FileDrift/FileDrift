@@ -152,18 +152,30 @@
         </UniformGrid>
 
         <!-- Activity log -->
-        <Grid Grid.Row="6" Margin="0,0,0,10">
+        <Grid Grid.Row="6" Margin="0,0,0,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <ui:TextBlock Grid.Row="0" Text="Activity" FontTypography="BodyStrong" FontSize="13" Margin="0,0,0,4" />
+            <Grid Grid.Row="0" Margin="0,0,0,3">
+                <ui:TextBlock Text="Activity" FontTypography="BodyStrong" FontSize="12" VerticalAlignment="Center" />
+                <ui:Button x:Name="CopyLogButton" Content="Copy" HorizontalAlignment="Right"
+                           Icon="{ui:SymbolIcon Copy24}" Padding="8,3" FontSize="11"
+                           Click="OnCopyLogClick" ToolTip="Copy activity log to clipboard" />
+            </Grid>
             <Border Grid.Row="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="6">
-                <ListBox x:Name="ActivityLog" Height="120" BorderThickness="0"
-                         FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12"
+                <ListBox x:Name="ActivityLog" Height="80" BorderThickness="0"
+                         FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11"
                          Background="{DynamicResource ControlFillColorDefaultBrush}"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         VirtualizingStackPanel.IsVirtualizing="True" />
+                         VirtualizingStackPanel.IsVirtualizing="True">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="6,1" />
+                            <Setter Property="MinHeight" Value="0" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
             </Border>
         </Grid>
 
