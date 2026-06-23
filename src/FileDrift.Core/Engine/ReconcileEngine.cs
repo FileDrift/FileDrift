@@ -9,11 +9,16 @@ namespace FileDrift.Core.Engine;
 public sealed class ReconcileEngine
 {
     private const int BufferSize = 1 << 20; // 1 MiB
+    private const FileDifference ContentDifferences = FileDifference.Size | FileDifference.Timestamp | FileDifference.Hash;
+
+    private readonly AclWriter _aclWriter = new();
 
     /// <summary>Builds the copy plan from comparison results. Pure (no I/O) — safe for preview.
     /// Acts only on MissingAtDest (copy) and Different (overwrite); directories and Extra/Matched
-    /// entries are ignored.</summary>
-    public static ReconcilePlan BuildPlan(IEnumerable<ComparisonResult> comparisons, string destRoot)
+    /// entries are ignored. When <paramref name="includeAcls"/> is set, also copies the source's
+    /// permissions (SDDL) so destination ACLs match — and an ACL-only difference is fixed without
+    /// rewriting the file's bytes.</summary>
+    public static ReconcilePlan BuildPlan(IEnumerable<ComparisonResult> comparisons, string destRoot, bool includeAcls = false)
     {
         var actions = new List<ReconcileAction>();
 
@@ -30,10 +35,17 @@ public sealed class ReconcileEngine
                         Kind = ReconcileActionKind.Copy,
                         SizeBytes = s.SizeBytes,
                         ClobbersNewer = false,
+                        CopyContent = true,
+                        ApplyAclSddl = includeAcls ? s.SecurityDescriptor : null, // new file → match source ACL
                     });
                     break;
 
                 case ComparisonStatus.Different when c.Source is { IsDirectory: false } s && c.Dest is { } d:
+                    bool contentDiffers = (c.Differences & ContentDifferences) != 0;
+                    bool aclDiffers = includeAcls && (c.Differences & FileDifference.Acl) != 0 && s.SecurityDescriptor is not null;
+                    if (!contentDiffers && !aclDiffers)
+                        break; // nothing actionable (e.g. ACL-only diff but ACL reconciliation off)
+
                     actions.Add(new ReconcileAction
                     {
                         RelativePath = c.RelativePath,
@@ -42,6 +54,8 @@ public sealed class ReconcileEngine
                         Kind = ReconcileActionKind.Overwrite,
                         SizeBytes = s.SizeBytes,
                         ClobbersNewer = d.LastWriteTimeUtc > s.LastWriteTimeUtc,
+                        CopyContent = contentDiffers,
+                        ApplyAclSddl = aclDiffers ? s.SecurityDescriptor : null,
                     });
                     break;
             }
@@ -53,7 +67,8 @@ public sealed class ReconcileEngine
             CopyCount = actions.Count(a => a.Kind == ReconcileActionKind.Copy),
             OverwriteCount = actions.Count(a => a.Kind == ReconcileActionKind.Overwrite),
             ClobberCount = actions.Count(a => a.ClobbersNewer),
-            TotalBytes = actions.Sum(a => a.SizeBytes),
+            AclCount = actions.Count(a => a.ApplyAclSddl is not null),
+            TotalBytes = actions.Where(a => a.CopyContent).Sum(a => a.SizeBytes),
         };
     }
 
@@ -70,7 +85,7 @@ public sealed class ReconcileEngine
         CancellationToken cancellationToken = default)
     {
         var connections = new List<IDisposable>();
-        int copied = 0, overwritten = 0;
+        int copied = 0, overwritten = 0, aclsApplied = 0;
         long bytes = 0;
         var failures = new List<ReconcileFailure>();
 
@@ -88,9 +103,19 @@ public sealed class ReconcileEngine
                 n++;
                 try
                 {
-                    await CopyFileAsync(a.SourceFullPath, a.DestFullPath, cancellationToken);
-                    if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
-                    bytes += a.SizeBytes;
+                    if (a.CopyContent)
+                    {
+                        await CopyFileAsync(a.SourceFullPath, a.DestFullPath, cancellationToken);
+                        if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
+                        bytes += a.SizeBytes;
+                    }
+
+                    if (a.ApplyAclSddl is { } sddl)
+                    {
+                        var aclError = _aclWriter.TryApplySddl(a.DestFullPath, sddl);
+                        if (aclError is null) aclsApplied++;
+                        else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"ACL: {aclError}" });
+                    }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -106,7 +131,7 @@ public sealed class ReconcileEngine
                 {
                     Processed = n,
                     Total = total,
-                    Message = $"{(a.Kind == ReconcileActionKind.Copy ? "Copy" : "Overwrite")} {a.RelativePath}",
+                    Message = $"{ActionVerb(a)} {a.RelativePath}",
                 });
             }
         }
@@ -121,9 +146,19 @@ public sealed class ReconcileEngine
             Copied = copied,
             Overwritten = overwritten,
             BytesCopied = bytes,
+            AclsApplied = aclsApplied,
             Failures = failures,
         };
     }
+
+    /// <summary>Describes what an action does, for progress/log display.</summary>
+    public static string ActionVerb(ReconcileAction a) => (a.CopyContent, a.ApplyAclSddl is not null) switch
+    {
+        (true, true) => a.Kind == ReconcileActionKind.Copy ? "Copy+ACL" : "Overwrite+ACL",
+        (true, false) => a.Kind == ReconcileActionKind.Copy ? "Copy" : "Overwrite",
+        (false, true) => "Set ACL",
+        _ => "Skip",
+    };
 
     private static async Task CopyFileAsync(string source, string dest, CancellationToken ct)
     {

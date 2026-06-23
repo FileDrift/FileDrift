@@ -22,17 +22,24 @@ public sealed record VerifyOptions
     /// tolerance. Any byte, permission, or timestamp difference counts as a difference.</summary>
     public bool Strict { get; init; }
 
-    /// <summary>Optional "as-of" cutoff (inclusive upper bound, UTC). When set, destination files
-    /// modified after this instant that have <em>no</em> source counterpart (i.e. would be reported
-    /// as Extra-at-dest) are treated as out of scope and excluded from the report — the post-migration
-    /// noise on a still-live destination. Files present on both sides are always compared regardless
-    /// of age, and the source side is never filtered (it is the source of truth).</summary>
-    public DateTime? AsOfUtc { get; init; }
+    /// <summary>Optional lower bound on Last-Modified time (UTC, inclusive). SYMMETRIC: files modified
+    /// before this on <em>either</em> side are ignored entirely — e.g. when consolidating into a
+    /// destination that already holds older content. Null = no lower bound.</summary>
+    public DateTime? StartUtc { get; init; }
 
-    /// <summary>Builds an inclusive end-of-day UTC cutoff from a local calendar date
-    /// (e.g. "2026-02-06" → last tick of that day, local, expressed in UTC).</summary>
+    /// <summary>Optional upper bound on Last-Modified time (UTC, inclusive). ASYMMETRIC: a destination
+    /// file modified after this is excluded only if it has <em>no</em> source counterpart (post-migration
+    /// noise on a live destination). Files present on both sides are always compared regardless of age,
+    /// and the source side is never filtered. Null = no upper bound.</summary>
+    public DateTime? EndUtc { get; init; }
+
+    /// <summary>Inclusive end-of-day UTC from a local calendar date (e.g. "2026-02-06" → its last tick).</summary>
     public static DateTime EndOfLocalDayUtc(DateTime localDate) =>
         DateTime.SpecifyKind(localDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Local).ToUniversalTime();
+
+    /// <summary>Inclusive start-of-day UTC from a local calendar date (e.g. "2026-02-06" → 00:00 local).</summary>
+    public static DateTime StartOfLocalDayUtc(DateTime localDate) =>
+        DateTime.SpecifyKind(localDate.Date, DateTimeKind.Local).ToUniversalTime();
 
     /// <summary>Applies Strict overrides, returning the options the engine should actually run with.
     /// Non-strict options are returned unchanged.</summary>

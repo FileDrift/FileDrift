@@ -17,11 +17,12 @@ internal static class VerifyCommand
         var credDst = new Option<string>("--cred-dest")   { Description = "Saved credential target name for the destination share" };
         var exclude = new Option<string>("--exclude") { Description = "Comma-separated glob patterns to exclude (e.g. \"*.tmp,~$*\")" };
         var strict  = new Option<bool>("--strict")  { Description = "Exact match: forces full depth, SHA-256, ACLs, and zero timestamp tolerance" };
-        var asOf    = new Option<string>("--as-of") { Description = "Cutoff date (yyyy-MM-dd). Excludes destination-only files modified after this date from the report" };
+        var start   = new Option<string>("--start") { Description = "Lower bound on last-modified (yyyy-MM-dd). Ignores files modified before this on BOTH sides" };
+        var end     = new Option<string>("--end")   { Description = "Upper bound on last-modified (yyyy-MM-dd). Excludes destination-only files modified after this" };
         var all     = new Option<bool>("--all")     { Description = "Include matched files in the differences array (default: differences only)" };
 
         var cmd = new Command("verify", "Compare source and destination trees and report differences");
-        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, asOf, all })
+        foreach (var o in new Option[] { src, dst, depth, hash, acl, threads, credSrc, credDst, exclude, strict, start, end, all })
             cmd.Add(o);
 
         cmd.SetAction(async (parseResult, ct) =>
@@ -40,7 +41,8 @@ internal static class VerifyCommand
                     ExcludePatterns = (parseResult.GetValue(exclude) ?? "")
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     Strict = parseResult.GetValue(strict),
-                    AsOfUtc = ParseAsOf(parseResult.GetValue(asOf)),
+                    StartUtc = ParseDate(parseResult.GetValue(start), startOfDay: true),
+                    EndUtc = ParseDate(parseResult.GetValue(end), startOfDay: false),
                 };
 
                 var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
@@ -77,7 +79,8 @@ internal static class VerifyCommand
                         includeAcl = run.Options.IncludeAcl,
                         threads = run.Options.Threads,
                         strict = run.Options.Strict,
-                        asOfUtc = run.Options.AsOfUtc,
+                        startUtc = run.Options.StartUtc,
+                        endUtc = run.Options.EndUtc,
                     },
                     summary = new
                     {
@@ -111,13 +114,13 @@ internal static class VerifyCommand
         _ => throw new ArgumentException($"Unknown depth '{value}'. Use quick, standard, or full."),
     };
 
-    private static DateTime? ParseAsOf(string? value)
+    private static DateTime? ParseDate(string? value, bool startOfDay)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!DateTime.TryParse(value, System.Globalization.CultureInfo.CurrentCulture,
                 System.Globalization.DateTimeStyles.None, out var date))
             throw new ArgumentException($"Unknown date '{value}'. Use a format like 2026-02-06.");
-        return VerifyOptions.EndOfLocalDayUtc(date);
+        return startOfDay ? VerifyOptions.StartOfLocalDayUtc(date) : VerifyOptions.EndOfLocalDayUtc(date);
     }
 
     private static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch

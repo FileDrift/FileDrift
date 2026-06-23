@@ -22,11 +22,12 @@
             <ui:CardControl.Header>
                 <StackPanel>
                     <ui:TextBlock Text="Theme" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Light or dark base"
+                    <ui:TextBlock Text="Follow the OS (System), or force Light or Dark"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>
             <ComboBox x:Name="ThemeBox" Width="170" SelectionChanged="OnManualChanged">
+                <ComboBoxItem Content="System" />
                 <ComboBoxItem Content="Light" />
                 <ComboBoxItem Content="Dark" />
             </ComboBox>

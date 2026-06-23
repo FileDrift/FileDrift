@@ -20,7 +20,7 @@ public partial class SettingsPage : Page
             PresetBox.Items.Add(new ComboBoxItem { Content = preset.Name });
         Select(PresetBox, settings.Preset);
 
-        ThemeBox.SelectedIndex = string.Equals(settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        Select(ThemeBox, settings.Theme); // System / Light / Dark
 
         foreach (var (name, _) in AppearanceApplier.Accents)
             AccentBox.Items.Add(new ComboBoxItem { Content = name });
@@ -58,7 +58,7 @@ public partial class SettingsPage : Page
         };
 
         _suppress = true;
-        ThemeBox.SelectedIndex = 0; // presets are Light
+        Select(ThemeBox, "Light"); // presets are Light-based
         _suppress = false;
 
         AppearanceApplier.Apply(settings);

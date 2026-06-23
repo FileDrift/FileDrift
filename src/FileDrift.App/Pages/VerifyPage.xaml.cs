@@ -37,12 +37,23 @@ public partial class VerifyPage : Page
         UpdateModeReadout();
     }
 
+    private bool _loadedOnce;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ThreadsBox.Text = VerifyOptions.DefaultThreads.ToString(); // 50% of logical processors
-        ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
-        UpdateHashVisibility();
-        RefreshCredentialCombos();
+        // The page is cached and reused across navigation; run first-time setup only once so we don't
+        // clobber the user's inputs (or a running verify) every time they return to this page.
+        if (!_loadedOnce)
+        {
+            _loadedOnce = true;
+            ThreadsBox.Text = VerifyOptions.DefaultThreads.ToString(); // 50% of logical processors
+            ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
+            UpdateHashVisibility();
+        }
+
+        // Pick up credentials added on the Credentials page since last visit (but not mid-run).
+        if (!_running)
+            RefreshCredentialCombos();
     }
 
     private void OnThreadsInput(object sender, System.Windows.Input.TextCompositionEventArgs e) =>
@@ -197,7 +208,8 @@ public partial class VerifyPage : Page
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         Strict = StrictSwitch.IsChecked == true,
-        AsOfUtc = AsOfBox.SelectedDate is { } d ? VerifyOptions.EndOfLocalDayUtc(d) : null,
+        StartUtc = StartBox.SelectedDate is { } s ? VerifyOptions.StartOfLocalDayUtc(s) : null,
+        EndUtc = EndBox.SelectedDate is { } en ? VerifyOptions.EndOfLocalDayUtc(en) : null,
     };
 
     // ── actions ──
@@ -291,8 +303,13 @@ public partial class VerifyPage : Page
             var result = await Task.Run(() => _preflight.RunAsync(src, dst, options, srcCred, dstCred, progress, _cts.Token));
             ProgressBar.IsIndeterminate = false;
             ProgressBar.Value = 100;
-            MatchedText.Text = result.SourceFileCount?.ToString("N0") ?? "—";
-            DifferentText.Text = result.DestFileCount?.ToString("N0") ?? "—";
+
+            // Repurpose the four tiles to show what preflight gathered.
+            SetSummaryLabels("Source files", "Source size", "Dest files", "Dest size");
+            MatchedText.Text   = result.SourceFileCount?.ToString("N0") ?? "—";
+            DifferentText.Text = Bytes(result.SourceTotalBytes);
+            MissingText.Text   = result.DestFileCount?.ToString("N0") ?? "—";
+            ExtraText.Text     = Bytes(result.DestTotalBytes);
 
             foreach (var issue in result.Issues)
                 AppendLog(issue);
@@ -399,7 +416,8 @@ public partial class VerifyPage : Page
     private ReconcilePlan? BuildPlanOrNull()
     {
         if (_lastResult is not { } r) return null;
-        var plan = ReconcileEngine.BuildPlan(r.Comparisons, _lastDst);
+        // ACL reconciliation is driven by whether the verify compared ACLs.
+        var plan = ReconcileEngine.BuildPlan(r.Comparisons, _lastDst, r.Run.Options.IncludeAcl);
         return plan.TotalActions == 0 ? null : plan;
     }
 
@@ -412,14 +430,15 @@ public partial class VerifyPage : Page
         }
 
         AppendLog($"── Preview: {plan.CopyCount:N0} to copy, {plan.OverwriteCount:N0} to overwrite" +
-                  $"{(plan.ClobberCount > 0 ? $" ({plan.ClobberCount:N0} newer at dest)" : "")}, {FormatSize(plan.TotalBytes)} total ──");
+                  $"{(plan.ClobberCount > 0 ? $", {plan.ClobberCount:N0} newer at dest" : "")}" +
+                  $"{(plan.AclCount > 0 ? $", {plan.AclCount:N0} ACLs" : "")}, {FormatSize(plan.TotalBytes)} total ──");
         foreach (var a in plan.Actions)
         {
-            var verb = a.Kind == ReconcileActionKind.Copy ? "copy     " : "overwrite";
             var warn = a.ClobbersNewer ? "  ⚠ dest newer" : "";
-            AppendLog($"[preview] {verb} {a.RelativePath}  ({FormatSize(a.SizeBytes)}){warn}");
+            AppendLog($"[preview] {ReconcileEngine.ActionVerb(a),-13} {a.RelativePath}  ({FormatSize(a.SizeBytes)}){warn}");
         }
-        StatusText.Text = $"Preview: would copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0} " +
+        StatusText.Text = $"Preview: would copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0}" +
+                          $"{(plan.AclCount > 0 ? $", set {plan.AclCount:N0} ACLs" : "")} " +
                           $"({FormatSize(plan.TotalBytes)}). No changes made.";
     }
 
@@ -433,8 +452,9 @@ public partial class VerifyPage : Page
 
         var msg = $"Reconcile will copy source → destination:\n\n" +
                   $"    • Copy {plan.CopyCount:N0} missing file(s)\n" +
-                  $"    • Overwrite {plan.OverwriteCount:N0} differing file(s)\n\n" +
-                  $"Total to write: {FormatSize(plan.TotalBytes)}.\n" +
+                  $"    • Overwrite {plan.OverwriteCount:N0} differing file(s)\n" +
+                  (plan.AclCount > 0 ? $"    • Set permissions (ACLs) on {plan.AclCount:N0} file(s)\n" : "") +
+                  $"\nTotal to write: {FormatSize(plan.TotalBytes)}.\n" +
                   $"The source is the source of truth — nothing on the destination is deleted.";
         if (plan.ClobberCount > 0)
             msg += $"\n\n⚠ WARNING: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
@@ -472,6 +492,7 @@ public partial class VerifyPage : Page
             ProgressBar.Value = 100;
             var summary = $"Reconcile done — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
                           $"{FormatSize(result.BytesCopied)} written" +
+                          (result.AclsApplied > 0 ? $", {result.AclsApplied:N0} ACLs set" : "") +
                           (result.FailureCount > 0 ? $", {result.FailureCount:N0} failed." : ".");
             StatusText.Text = summary;
             AppendLog(summary);
@@ -521,18 +542,30 @@ public partial class VerifyPage : Page
     private void ResetSummary()
     {
         MatchedText.Text = DifferentText.Text = MissingText.Text = ExtraText.Text = "—";
+        SetSummaryLabels("Matched", "Different", "Missing at dest", "Extra at dest");
         ProgressBar.Value = 0;
     }
 
+    private void SetSummaryLabels(string a, string b, string c, string d)
+    {
+        MatchedLabel.Text = a;
+        DifferentLabel.Text = b;
+        MissingLabel.Text = c;
+        ExtraLabel.Text = d;
+    }
+
+    private bool _running;
+
     private void SetRunning(bool running)
     {
+        _running = running;
         VerifyButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         PreflightButton.IsEnabled = !running;
         SourceBox.IsEnabled = DestBox.IsEnabled = DepthBox.IsEnabled = HashBox.IsEnabled =
             AclSwitch.IsEnabled = ThreadsBox.IsEnabled = ExcludeBox.IsEnabled =
             StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled =
-            AsOfBox.IsEnabled = !running;
+            StartBox.IsEnabled = EndBox.IsEnabled = !running;
 
         if (running)
         {

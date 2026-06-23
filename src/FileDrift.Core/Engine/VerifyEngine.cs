@@ -77,15 +77,16 @@ public sealed class VerifyEngine
             var comparer = options.Strict ? new ComparisonEngine(TimeSpan.Zero) : _comparison;
             var comparisons = comparer.Compare(source.Values.ToArray(), dest.Values.ToArray(), options);
 
-            // As-of cutoff: drop destination-only files newer than the cutoff (post-migration noise).
-            // Files present on both sides are kept and compared regardless of age.
+            // End (upper bound), ASYMMETRIC: drop destination-only files newer than End (post-migration
+            // noise). Files present on both sides are kept and compared regardless of age. The Start
+            // (lower bound) is applied symmetrically during enumeration, above.
             long excludedNewer = 0;
-            if (options.AsOfUtc is { } cutoff)
+            if (options.EndUtc is { } end)
             {
                 var kept = new List<ComparisonResult>(comparisons.Count);
                 foreach (var c in comparisons)
                 {
-                    if (c.Status == ComparisonStatus.ExtraAtDest && c.Dest is { } d && d.LastWriteTimeUtc > cutoff)
+                    if (c.Status == ComparisonStatus.ExtraAtDest && c.Dest is { } d && d.LastWriteTimeUtc > end)
                     {
                         excludedNewer++;
                         continue;
@@ -96,7 +97,7 @@ public sealed class VerifyEngine
                 progress?.Report(new VerifyProgress
                 {
                     Phase = VerifyPhase.Comparing,
-                    Message = $"Excluded {excludedNewer:N0} newer destination files (as-of {cutoff.ToLocalTime():yyyy-MM-dd})",
+                    Message = $"Excluded {excludedNewer:N0} destination-only files modified after {end.ToLocalTime():yyyy-MM-dd}",
                 });
             }
 
@@ -148,7 +149,7 @@ public sealed class VerifyEngine
     {
         var map = new ConcurrentDictionary<string, FileRecord>(StringComparer.OrdinalIgnoreCase);
         var excludes = new GlobMatcher(options.ExcludePatterns);
-        long count = 0;
+        long count = 0, skippedOld = 0;
 
         var enumProgress = new Progress<EnumerationProgress>(p =>
             progress?.Report(new VerifyProgress
@@ -163,11 +164,16 @@ public sealed class VerifyEngine
         await foreach (var record in _enumerator.EnumerateAsync(rootPath, options, enumProgress, ct))
         {
             if (excludes.IsExcluded(record.RelativePath)) continue;
+            // Start (lower bound), SYMMETRIC: ignore files modified before Start on both sides.
+            if (options.StartUtc is { } start && record.LastWriteTimeUtc < start) { skippedOld++; continue; }
             map[record.RelativePath] = record;
             count++;
         }
 
-        progress?.Report(new VerifyProgress { Phase = phase, Processed = count, Total = count, Message = $"Found {count} files" });
+        var foundMsg = skippedOld > 0
+            ? $"Found {count:N0} files (skipped {skippedOld:N0} modified before start date)"
+            : $"Found {count:N0} files";
+        progress?.Report(new VerifyProgress { Phase = phase, Processed = count, Total = count, Message = foundMsg });
         return map;
     }
 

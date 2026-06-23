@@ -14,6 +14,7 @@ internal static class AclMethods
     internal const uint DaclSecurityInformation  = 0x00000004;
 
     internal const int  ErrorSuccess = 0;
+    internal const int  ErrorPrivilegeNotHeld = 1314; // SetNamedSecurityInfo owner/group needs privilege
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
     internal static extern int GetNamedSecurityInfoW(
@@ -37,4 +38,40 @@ internal static class AclMethods
 
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern IntPtr LocalFree(IntPtr hMem);
+
+    // ── writing ──
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        string stringSecurityDescriptor,
+        int stringSdRevision,
+        out IntPtr securityDescriptor,
+        out int securityDescriptorSize);
+
+    [DllImport("advapi32.dll", SetLastError = false)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetSecurityDescriptorOwner(
+        IntPtr securityDescriptor, out IntPtr owner, [MarshalAs(UnmanagedType.Bool)] out bool ownerDefaulted);
+
+    [DllImport("advapi32.dll", SetLastError = false)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetSecurityDescriptorGroup(
+        IntPtr securityDescriptor, out IntPtr group, [MarshalAs(UnmanagedType.Bool)] out bool groupDefaulted);
+
+    [DllImport("advapi32.dll", SetLastError = false)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetSecurityDescriptorDacl(
+        IntPtr securityDescriptor, [MarshalAs(UnmanagedType.Bool)] out bool daclPresent,
+        out IntPtr dacl, [MarshalAs(UnmanagedType.Bool)] out bool daclDefaulted);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
+    internal static extern int SetNamedSecurityInfoW(
+        string pObjectName,
+        int objectType,
+        uint securityInfo,
+        IntPtr psidOwner,
+        IntPtr psidGroup,
+        IntPtr pDacl,
+        IntPtr pSacl);
 }

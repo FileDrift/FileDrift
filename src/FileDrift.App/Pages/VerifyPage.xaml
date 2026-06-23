@@ -100,11 +100,18 @@
                 <ui:TextBox x:Name="ExcludeBox" Width="200" PlaceholderText="*.tmp, ~$*  (comma-separated)" />
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
-                        ToolTip="Optional cutoff. Destination files modified AFTER this date that have no source match (post-migration additions) are excluded from the report. Files present on both sides are always compared. Leave blank to compare everything.">
-                <ui:TextBlock Text="As of" VerticalAlignment="Center" Margin="0,0,6,0"
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,8" VerticalAlignment="Center"
+                        ToolTip="Optional lower bound on last-modified date. Files modified BEFORE this are ignored on BOTH sides (e.g. consolidating into a destination that already holds older content). Leave blank for no lower bound.">
+                <ui:TextBlock Text="Start" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <DatePicker x:Name="AsOfBox" Width="130" />
+                <DatePicker x:Name="StartBox" Width="120" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
+                        ToolTip="Optional upper bound on last-modified date. Destination files modified AFTER this with no source match are excluded as post-migration noise; files present on both sides are always compared. Leave blank for no upper bound.">
+                <ui:TextBlock Text="End" VerticalAlignment="Center" Margin="0,0,6,0"
+                              Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <DatePicker x:Name="EndBox" Width="120" />
             </StackPanel>
         </WrapPanel>
 
@@ -141,25 +148,25 @@
         <UniformGrid Grid.Row="5" Columns="4" Margin="0,0,0,12">
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="0,0,5,0" Padding="12,8">
                 <StackPanel>
-                    <ui:TextBlock Text="Matched" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                    <ui:TextBlock x:Name="MatchedLabel" Text="Matched" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="MatchedText" Text="—" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
-                    <ui:TextBlock Text="Different" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                    <ui:TextBlock x:Name="DifferentLabel" Text="Different" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="DifferentText" Text="—" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
-                    <ui:TextBlock Text="Missing at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                    <ui:TextBlock x:Name="MissingLabel" Text="Missing at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="MissingText" Text="—" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="5,0,0,0" Padding="12,8">
                 <StackPanel>
-                    <ui:TextBlock Text="Extra at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                    <ui:TextBlock x:Name="ExtraLabel" Text="Extra at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="ExtraText" Text="—" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>

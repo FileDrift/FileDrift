@@ -6,8 +6,8 @@ public sealed class AppSettings
     /// <summary>Named preset ("Custom", "Ocean", …). Informational; the resolved colors below are authoritative.</summary>
     public string Preset { get; set; } = ColorPresets.Custom;
 
-    /// <summary>Base theme: "Light" or "Dark".</summary>
-    public string Theme { get; set; } = "Light";
+    /// <summary>Base theme: "System" (follow OS light/dark), "Light", or "Dark". Defaults to System.</summary>
+    public string Theme { get; set; } = AppearanceApplier.SystemTheme;
 
     /// <summary>Accent: a named preset color or a #hex string. Drives buttons and highlights.</summary>
     public string Accent { get; set; } = "Default (blue)";

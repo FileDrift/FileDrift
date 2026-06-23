@@ -8,6 +8,8 @@ public partial class MainWindow : FluentWindow
     public MainWindow()
     {
         InitializeComponent();
+        // Cache the Verify page so a running verify survives navigation to Settings/History and back.
+        RootNavigation.SetPageProviderService(new PageProvider());
         Loaded += (_, _) =>
         {
             RootNavigation.Navigate(typeof(Pages.VerifyPage));

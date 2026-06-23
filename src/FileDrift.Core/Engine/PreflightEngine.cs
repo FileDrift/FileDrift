@@ -95,7 +95,14 @@ public sealed class PreflightEngine
             long count = 0, bytes = 0;
             var excludes = new GlobMatcher(options.ExcludePatterns);
             var enumProgress = new Progress<EnumerationProgress>(p =>
-                progress?.Report(new VerifyProgress { Phase = phase, Processed = p.FilesFound, Message = $"Scanning {label}" }));
+                progress?.Report(new VerifyProgress
+                {
+                    Phase = phase,
+                    Processed = p.FilesFound,
+                    Message = p.CurrentDirectory is { } dir
+                        ? $"Scanning {dir} ({p.FilesFound:N0} files)"
+                        : $"Scanning {label}… ({p.FilesFound:N0} files)",
+                }));
 
             await foreach (var record in _enumerator.EnumerateAsync(path, options, enumProgress, ct))
             {
@@ -104,6 +111,7 @@ public sealed class PreflightEngine
                 bytes += record.SizeBytes;
             }
 
+            progress?.Report(new VerifyProgress { Phase = phase, Processed = count, Total = count, Message = $"{label}: {count:N0} files, {bytes:N0} bytes" });
             return (true, count, bytes);
         }
         catch (UnauthorizedAccessException ex)

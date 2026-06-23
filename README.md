@@ -89,6 +89,13 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.2.0 (2026-06-23)
+- **Date range filter** — replaced the single "As of" cutoff with **Start** and **End** dates (on last-modified). Start is symmetric (ignores files older than it on both sides — for consolidating into a destination with existing older content); End is asymmetric (excludes only newer destination-only files, so a migrated file edited later still compares as different rather than going missing). CLI: `--start` / `--end`.
+- **ACL reconciliation** — Reconcile now also copies permissions (owner/group/DACL) when the verify compared ACLs; an ACL-only difference is fixed without rewriting the file.
+- **System theme** — theme now defaults to **System** (follows OS light/dark, live), alongside Light/Dark. Color presets trimmed to Trans Rights.
+- **Navigation no longer orphans a running verify** — the Verify page is cached, so visiting Settings/History mid-run and returning keeps the live activity, progress, and inputs.
+- **Preflight parity** — preflight shows per-directory scanning detail and reports source/dest file counts and sizes in clearly-labeled tiles.
+
 ### 0.1.1 (2026-06-23)
 - Fix crash when typing a UNC path into the source/destination box (partial-path parsing threw on the second backslash).
 - Fix the app becoming unresponsive when verifying very large trees (1M+ files): the results grid now lists **differences only** (matched files are summarised by the count tile), projected off the UI thread and bound in one pass, capped at 100,000 rows.

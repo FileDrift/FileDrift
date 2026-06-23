@@ -10,6 +10,7 @@ namespace FileDrift.App.Settings;
 public static class AppearanceApplier
 {
     public const string DefaultToken = "Default";
+    public const string SystemTheme = "System";
 
     public static readonly (string Name, Color Color)[] Accents =
     [
@@ -24,11 +25,21 @@ public static class AppearanceApplier
 
     public static void Apply(AppSettings settings)
     {
-        var theme = string.Equals(settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase)
-            ? ApplicationTheme.Dark
-            : ApplicationTheme.Light;
+        ApplicationTheme theme;
+        if (string.Equals(settings.Theme, SystemTheme, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplicationThemeManager.ApplySystemTheme(updateAccent: false); // resolves OS light/dark
+            theme = ApplicationThemeManager.GetAppTheme();
+            if (theme is ApplicationTheme.Unknown) theme = ApplicationTheme.Light;
+        }
+        else
+        {
+            theme = string.Equals(settings.Theme, "Dark", StringComparison.OrdinalIgnoreCase)
+                ? ApplicationTheme.Dark
+                : ApplicationTheme.Light;
+            ApplicationThemeManager.Apply(theme, WindowBackdropType.Mica, updateAccent: false);
+        }
 
-        ApplicationThemeManager.Apply(theme, WindowBackdropType.Mica, updateAccent: false);
         ApplicationAccentColorManager.Apply(ResolveColor(settings.Accent), theme, false, false);
         ApplyWindowChrome(settings);
     }
@@ -55,6 +66,15 @@ public static class AppearanceApplier
                 ? Brushes.Transparent
                 : FrozenBrush(ResolveColor(settings.Background));
         }
+
+        // In System mode (which only pairs with the default Mica background), follow live OS
+        // light/dark changes; otherwise stop following so a manual theme choice sticks.
+        bool followSystem = string.Equals(settings.Theme, SystemTheme, StringComparison.OrdinalIgnoreCase)
+                            && IsDefault(settings.Background);
+        if (followSystem)
+            SystemThemeWatcher.Watch(main, WindowBackdropType.Mica, false);
+        else
+            SystemThemeWatcher.UnWatch(main);
     }
 
     private static SolidColorBrush FrozenBrush(Color color)
