@@ -4,11 +4,7 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Verify"
       FontSize="13">
-    <!-- Bind to the hosting ScrollViewer's viewport so this page has a BOUNDED height. Without it the
-         page (inside WPF-UI's content ScrollViewer) gets infinite height, the results DataGrid never
-         virtualizes, and it arranges every row at once — a multi-minute UI hang on large result sets. -->
-    <Grid Margin="20,12,20,12"
-          Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}">
+    <Grid Margin="20,12,20,12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

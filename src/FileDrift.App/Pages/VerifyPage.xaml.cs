@@ -59,6 +59,27 @@ public partial class VerifyPage : Page
         // Pick up credentials added on the Credentials page since last visit (but not mid-run).
         if (!_running)
             RefreshCredentialCombos();
+
+        // The page is hosted inside WPF-UI's content ScrollViewer, which gives it infinite height — so
+        // the results DataGrid never virtualizes and arranges every row (a multi-second freeze on each
+        // display). Give the grid a STABLE bounded height tied to the window so it always virtualizes.
+        // (Binding to the ScrollViewer's ViewportHeight doesn't work — it lags at 0 on the first pass.)
+        if (Window.GetWindow(this) is { } win)
+        {
+            win.SizeChanged -= OnHostSizeChanged;
+            win.SizeChanged += OnHostSizeChanged;
+        }
+        UpdateResultsMaxHeight();
+    }
+
+    private void OnHostSizeChanged(object? sender, SizeChangedEventArgs e) => UpdateResultsMaxHeight();
+
+    /// <summary>Caps the results grid height to the visible area so it virtualizes. The offset leaves
+    /// room for the controls above; if it is slightly off the page just scrolls — there is no freeze.</summary>
+    private void UpdateResultsMaxHeight()
+    {
+        double host = Window.GetWindow(this)?.ActualHeight ?? 640;
+        ResultsGrid.MaxHeight = Math.Max(120, host - 480);
     }
 
     private void OnThreadsInput(object sender, System.Windows.Input.TextCompositionEventArgs e) =>
