@@ -18,4 +18,15 @@ public static class AppPaths
 
     /// <summary>%APPDATA%\FileDrift\history.db</summary>
     public static string HistoryDatabase => Path.Combine(DataDirectory, "history.db");
+
+    /// <summary>%APPDATA%\FileDrift\logs (created on access). Per-run activity logs.</summary>
+    public static string LogsDirectory
+    {
+        get
+        {
+            var dir = Path.Combine(DataDirectory, "logs");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
 }

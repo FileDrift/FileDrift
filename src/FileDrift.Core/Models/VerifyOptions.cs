@@ -15,6 +15,11 @@ public sealed record VerifyOptions
     /// (owners often differ across servers without being meaningful drift). Strict forces it on.</summary>
     public bool EnforceOwnership { get; init; }
 
+    /// <summary>Scope of ACL comparison: files+folders (default, complete) or folders only (fast).
+    /// Folders-only skips reading every file's security descriptor — far fewer SMB round-trips — but
+    /// misses a permission set directly on an individual file. Strict forces files+folders.</summary>
+    public AclScope AclScope { get; init; } = AclScope.FilesAndFolders;
+
     /// <summary>Default parallelism: 50% of logical processors (at least 1).</summary>
     public int Threads { get; init; } = DefaultThreads;
 
@@ -56,6 +61,7 @@ public sealed record VerifyOptions
             HashAlgorithm = FileDriftHashAlgorithm.SHA256,
             IncludeAcl = true,
             EnforceOwnership = true,
+            AclScope = AclScope.FilesAndFolders, // strict is complete
         }
         : this;
 }

@@ -96,7 +96,8 @@ public sealed class ComparisonEngine
             }
         }
 
-        if (options.IncludeAcl)
+        // Folders-only scope compares ACLs on directories only (file ACLs weren't even read).
+        if (options.IncludeAcl && (options.AclScope == AclScope.FilesAndFolders || s.IsDirectory))
         {
             // Compare only explicit (non-inherited) permissions; inherited ACEs differ structurally
             // between two server roots and aren't drift.

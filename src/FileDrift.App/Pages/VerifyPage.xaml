@@ -75,8 +75,16 @@
                 </ComboBox>
             </StackPanel>
 
-            <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,18,8" VerticalAlignment="Center"
-                             ToolTip="Compare explicit (non-inherited) permissions on files AND folders. Inherited permissions are ignored (they differ structurally between servers). Enumerates directories too; slower." />
+            <ui:ToggleSwitch x:Name="AclSwitch" Content="Compare ACLs" Margin="0,0,10,8" VerticalAlignment="Center"
+                             Checked="OnAclChanged" Unchecked="OnAclChanged"
+                             ToolTip="Compare explicit (non-inherited) permissions. Inherited permissions are ignored (they differ structurally between servers). Enumerates directories too; slower." />
+
+            <ComboBox x:Name="AclScopeBox" Width="128" Margin="0,0,18,8" VerticalAlignment="Center" SelectedIndex="0" IsEnabled="False"
+                      ToolTipService.ShowOnDisabled="True"
+                      ToolTip="ACL scope. Files + folders = complete (reads every file's permissions; slow). Folders only = fast (reads folder permissions only — explicit perms usually live on folders), but misses a permission set directly on an individual file.">
+                <ComboBoxItem Content="Files + folders" />
+                <ComboBoxItem Content="Folders only" />
+            </ComboBox>
 
             <ui:ToggleSwitch x:Name="OwnerSwitch" Content="Enforce ownership" Margin="0,0,18,8" VerticalAlignment="Center"
                              ToolTipService.ShowOnDisabled="True"

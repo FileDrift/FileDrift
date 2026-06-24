@@ -16,6 +16,15 @@ public enum VerifyDepth
 
 public enum FileDriftHashAlgorithm { MD5, SHA1, SHA256 }
 
+/// <summary>Which entries get their ACLs compared when ACL comparison is on.</summary>
+public enum AclScope
+{
+    /// <summary>Compare ACLs on both files and folders (complete; reads every file's security descriptor).</summary>
+    FilesAndFolders,
+    /// <summary>Compare ACLs on folders only (fast — skips file ACL reads; misses a permission set directly on a file).</summary>
+    FoldersOnly,
+}
+
 /// <summary>Top-level outcome of comparing one file entry.</summary>
 public enum ComparisonStatus { Matched, Different, MissingAtDest, ExtraAtDest }
 

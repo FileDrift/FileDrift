@@ -204,14 +204,16 @@ public sealed class VerifyEngine
             string? sSddl = s.SecurityDescriptor, dSddl = d.SecurityDescriptor;
             string? sOwner = s.Owner, dOwner = d.Owner;
 
-            // Only hash when sizes match — a size mismatch is already a definitive difference.
-            if (doHash && s.SizeBytes == d.SizeBytes)
+            // Only hash files (not directories) whose sizes match — a size mismatch is already definitive.
+            if (doHash && !s.IsDirectory && s.SizeBytes == d.SizeBytes)
             {
                 sHash = await _hasher.TryComputeHashAsync(s.FullPath, options.HashAlgorithm, token);
                 dHash = await _hasher.TryComputeHashAsync(d.FullPath, options.HashAlgorithm, token);
             }
 
-            if (doAcl)
+            // Folders-only scope skips reading file ACLs (the bulk of the SMB round-trips).
+            bool readAcl = doAcl && (options.AclScope == AclScope.FilesAndFolders || s.IsDirectory);
+            if (readAcl)
             {
                 sSddl = _aclReader.TryGetSddl(s.FullPath);
                 dSddl = _aclReader.TryGetSddl(d.FullPath);

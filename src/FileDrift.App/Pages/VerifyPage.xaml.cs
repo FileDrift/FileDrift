@@ -52,6 +52,7 @@ public partial class VerifyPage : Page
             ThreadsBox.Text = VerifyOptions.DefaultThreads.ToString(); // 50% of logical processors
             ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
             UpdateHashVisibility();
+            UpdateAclScopeEnabled();
         }
 
         // Pick up credentials added on the Credentials page since last visit (but not mid-run).
@@ -164,6 +165,15 @@ public partial class VerifyPage : Page
 
     private void OnStrictChanged(object sender, RoutedEventArgs e) => ApplyStrictState();
 
+    private void OnAclChanged(object sender, RoutedEventArgs e) => UpdateAclScopeEnabled();
+
+    /// <summary>The ACL-scope dropdown only matters with Compare ACLs on, and Strict forces the full scope.</summary>
+    private void UpdateAclScopeEnabled()
+    {
+        if (AclScopeBox is null || AclSwitch is null || StrictSwitch is null) return;
+        AclScopeBox.IsEnabled = AclSwitch.IsChecked == true && StrictSwitch.IsChecked != true;
+    }
+
     /// <summary>When Strict is on, force Full/SHA-256/ACL and disable those controls so the UI
     /// reflects what will actually run.</summary>
     private void ApplyStrictState()
@@ -176,13 +186,15 @@ public partial class VerifyPage : Page
             DepthBox.SelectedIndex = 2;  // Full
             HashBox.SelectedIndex = 2;   // SHA256
             AclSwitch.IsChecked = true;
-            OwnerSwitch.IsChecked = true; // Strict enforces ownership too
+            OwnerSwitch.IsChecked = true;     // Strict enforces ownership too
+            AclScopeBox.SelectedIndex = 0;    // Strict is complete: files + folders
         }
 
         DepthBox.IsEnabled = !strict;
         AclSwitch.IsEnabled = !strict;
         OwnerSwitch.IsEnabled = !strict;
         UpdateHashVisibility();
+        UpdateAclScopeEnabled();
     }
 
     private void UpdateModeReadout()
@@ -210,6 +222,7 @@ public partial class VerifyPage : Page
         HashAlgorithm = (FileDriftHashAlgorithm)Math.Max(0, HashBox.SelectedIndex),
         IncludeAcl = AclSwitch.IsChecked == true,
         EnforceOwnership = OwnerSwitch.IsChecked == true,
+        AclScope = AclScopeBox.SelectedIndex == 1 ? AclScope.FoldersOnly : AclScope.FilesAndFolders,
         Threads = ResolveThreads(),
         ExcludePatterns = (ExcludeBox.Text ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
@@ -242,6 +255,7 @@ public partial class VerifyPage : Page
         ResultsGrid.ItemsSource = null;
         ResetSummary();
         ClearLog();
+        StartRunLog("verify", src, dst);
         AppendLog($"Starting verify ({DescribeOptions(options)})");
         AppendLog($"Source: {src}");
         AppendLog($"Destination: {dst}");
@@ -274,14 +288,15 @@ public partial class VerifyPage : Page
             StatusText.Text = m;
             AppendLog(m);
         }
-        finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
+        finally { EndRunLog(); SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
     private static string DescribeOptions(VerifyOptions o)
     {
         var parts = new List<string> { o.Depth.ToString().ToLowerInvariant() };
         if (o.Depth == VerifyDepth.Full) parts.Add(o.HashAlgorithm.ToString());
-        if (o.IncludeAcl) parts.Add("ACLs");
+        if (o.IncludeAcl) parts.Add(o.AclScope == AclScope.FoldersOnly ? "ACLs (folders only)" : "ACLs");
+        if (o.EnforceOwnership) parts.Add("owner");
         if (o.Strict) parts.Add("strict");
         parts.Add($"{o.Threads} threads");
         return string.Join(", ", parts);
@@ -304,6 +319,7 @@ public partial class VerifyPage : Page
         SetRunning(true);
         ResetSummary();
         ClearLog();
+        StartRunLog("preflight", src, dst);
         AppendLog("Starting preflight");
         AppendLog($"Source: {src}");
         AppendLog($"Destination: {dst}");
@@ -339,7 +355,7 @@ public partial class VerifyPage : Page
             StatusText.Text = m;
             AppendLog(m);
         }
-        finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
+        finally { EndRunLog(); SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
@@ -375,19 +391,21 @@ public partial class VerifyPage : Page
             ProgressBar.IsIndeterminate = true;
         }
 
-        // The progress bar + status line above carry the live view, so the log only needs to be a
-        // periodic record: throttle scan/enrich lines to one every LogThrottle. Phase changes always log.
-        bool phaseChanged = p.Phase != _lastProgressPhase;
-        _lastProgressPhase = p.Phase;
-        if (!phaseChanged && DateTime.UtcNow - _lastLogAppendUtc < LogThrottle)
-            return;
-
-        AppendLog(p.Phase switch
+        var line = p.Phase switch
         {
             VerifyPhase.EnumeratingSource => $"Source · {message}",
             VerifyPhase.EnumeratingDestination => $"Destination · {message}",
             _ => message,
-        });
+        };
+
+        // The file log gets every report (complete record). The on-screen log only needs to be a
+        // periodic record since the progress bar + status carry the live view: throttle to one every
+        // LogThrottle, but always show the first line of a new phase.
+        LogToFile(line);
+        bool phaseChanged = p.Phase != _lastProgressPhase;
+        _lastProgressPhase = p.Phase;
+        if (phaseChanged || DateTime.UtcNow - _lastLogAppendUtc >= LogThrottle)
+            AppendScreen(line);
     }
 
     // ── activity log ──
@@ -396,8 +414,20 @@ public partial class VerifyPage : Page
     private string? _lastLogged;
     private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
     private DateTime _lastLogAppendUtc = DateTime.MinValue;
+    private RunLogger? _runLogger;
 
+    /// <summary>Logs an important line to both the on-screen log and the run's file log.</summary>
     private void AppendLog(string line)
+    {
+        LogToFile(line);
+        AppendScreen(line);
+    }
+
+    /// <summary>Writes to the complete, unthrottled per-run file log (if a run is active).</summary>
+    private void LogToFile(string line) => _runLogger?.Write(line);
+
+    /// <summary>Appends to the throttled on-screen activity log.</summary>
+    private void AppendScreen(string line)
     {
         if (line == _lastLogged) return; // collapse consecutive duplicates
         _lastLogged = line;
@@ -413,6 +443,18 @@ public partial class VerifyPage : Page
     {
         ActivityLog.Items.Clear();
         _lastLogged = null;
+    }
+
+    private void StartRunLog(string verb, string src, string dst) => _runLogger = RunLogger.Start(verb, src, dst);
+
+    private void EndRunLog()
+    {
+        if (_runLogger is { } logger)
+        {
+            if (logger.FilePath is { } path) AppendScreen($"Activity log saved to {path}");
+            logger.Dispose();
+            _runLogger = null;
+        }
     }
 
     private void OnCopyLogClick(object sender, RoutedEventArgs e)
@@ -484,6 +526,7 @@ public partial class VerifyPage : Page
         _cts = new CancellationTokenSource();
         SetRunning(true);
         ClearLog();
+        StartRunLog("reconcile", _lastSrc, _lastDst);
         AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +
                   $"({FormatSize(plan.TotalBytes)}) source → destination");
 
@@ -495,7 +538,11 @@ public partial class VerifyPage : Page
                 ProgressBar.Value = Math.Min(100, p.Processed * 100.0 / p.Total);
             }
             StatusText.Text = $"Reconciling {p.Processed:N0}/{p.Total:N0}…";
-            if (p.Message is { } m) AppendLog(m);
+            if (p.Message is { } m)
+            {
+                LogToFile(m); // every action to the file log
+                if (DateTime.UtcNow - _lastLogAppendUtc >= LogThrottle) AppendScreen(m); // throttled on screen
+            }
         });
 
         try
@@ -526,7 +573,7 @@ public partial class VerifyPage : Page
             StatusText.Text = m;
             AppendLog(m);
         }
-        finally { SetRunning(false); _cts?.Dispose(); _cts = null; }
+        finally { EndRunLog(); SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
     private void ShowResult(VerifyResult result, List<ComparisonRow> rows)
@@ -549,6 +596,8 @@ public partial class VerifyPage : Page
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest files.";
         if (result.ExcludedNewerCount > 0)
             summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
+        if (run.Options is { IncludeAcl: true, AclScope: AclScope.FoldersOnly })
+            summary += "  (ACL scope: folders only — file permissions not checked.)";
         if (run.TotalDifferences > rows.Count)
             summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences.)";
         StatusText.Text = summary;
@@ -581,7 +630,7 @@ public partial class VerifyPage : Page
         SourceBox.IsEnabled = DestBox.IsEnabled = DepthBox.IsEnabled = HashBox.IsEnabled =
             AclSwitch.IsEnabled = ThreadsBox.IsEnabled = ExcludeBox.IsEnabled =
             StrictSwitch.IsEnabled = SourceCredBox.IsEnabled = DestCredBox.IsEnabled =
-            OwnerSwitch.IsEnabled = StartBox.IsEnabled = EndBox.IsEnabled = !running;
+            OwnerSwitch.IsEnabled = AclScopeBox.IsEnabled = StartBox.IsEnabled = EndBox.IsEnabled = !running;
 
         if (running)
         {
