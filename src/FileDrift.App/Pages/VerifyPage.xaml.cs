@@ -23,8 +23,11 @@ public partial class VerifyPage : Page
     private CancellationTokenSource? _cts;
     private bool _hasDefaultCredential;
 
-    // Context of the last completed verify, so Reconcile/Preview can act on it.
-    private VerifyResult? _lastResult;
+    // Context of the last completed verify, so Reconcile/Preview can act on it. We retain ONLY the
+    // differences (not the matched comparisons) so a large ACL run — where every record carries a full
+    // SDDL — doesn't pin multiple GB of matched data in memory after the run.
+    private List<ComparisonResult>? _lastDiffs;
+    private RunRecord? _lastRun;
     private string _lastSrc = "", _lastDst = "";
     private NetworkCredential? _lastSrcCred, _lastDstCred;
 
@@ -247,15 +250,20 @@ public partial class VerifyPage : Page
         try
         {
             var result = await Task.Run(() => _engine.RunAsync(src, dst, options, srcCred, dstCred, progress, _cts.Token));
-            // Project the grid rows off the UI thread: differences only, sorted, capped.
-            var rows = await Task.Run(() => result.Comparisons
-                .Where(c => c.Status != ComparisonStatus.Matched)
-                .OrderBy(c => c.RelativePath, StringComparer.OrdinalIgnoreCase)
-                .Take(MaxGridRows)
-                .Select(ComparisonRow.From)
-                .ToList());
+            // Off the UI thread: keep only the differences (all the grid and Reconcile need), and project
+            // the grid rows. Dropping the matched comparisons lets their (SDDL-bearing) records be GC'd.
+            var (diffs, rows) = await Task.Run(() =>
+            {
+                var d = result.Comparisons.Where(c => c.Status != ComparisonStatus.Matched).ToList();
+                var r = d.OrderBy(c => c.RelativePath, StringComparer.OrdinalIgnoreCase)
+                         .Take(MaxGridRows)
+                         .Select(ComparisonRow.From)
+                         .ToList();
+                return (d, r);
+            });
             ShowResult(result, rows);
-            _lastResult = result;
+            _lastDiffs = diffs;
+            _lastRun = result.Run;
             _lastSrc = src; _lastDst = dst;
             _lastSrcCred = srcCred; _lastDstCred = dstCred;
         }
@@ -418,10 +426,10 @@ public partial class VerifyPage : Page
 
     private ReconcilePlan? BuildPlanOrNull()
     {
-        if (_lastResult is not { } r) return null;
+        if (_lastDiffs is not { } diffs || _lastRun is not { } run) return null;
         // ACL reconciliation is driven by whether the verify compared ACLs / enforced ownership.
         var plan = ReconcileEngine.BuildPlan(
-            r.Comparisons, _lastDst, r.Run.Options.IncludeAcl, r.Run.Options.EnforceOwnership);
+            diffs, _lastDst, run.Options.IncludeAcl, run.Options.EnforceOwnership);
         return plan.TotalActions == 0 ? null : plan;
     }
 
@@ -507,7 +515,8 @@ public partial class VerifyPage : Page
                 AppendLog($"[FAILED] {f.RelativePath} — {f.Error}");
 
             // Destination changed; require a fresh verify before reconciling again.
-            _lastResult = null;
+            _lastDiffs = null;
+            _lastRun = null;
             AppendLog("Re-run Verify to confirm the destination now matches.");
         }
         catch (OperationCanceledException) { StatusText.Text = "Reconcile cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
@@ -588,8 +597,8 @@ public partial class VerifyPage : Page
     /// <summary>Enables Preview/Reconcile when the last completed verify has files to copy or overwrite.</summary>
     private void UpdateReconcileState()
     {
-        bool actionable = _lastResult is { } r &&
-            r.Run.MissingAtDestCount + r.Run.DifferentCount > 0;
+        bool actionable = _lastRun is { } run &&
+            run.MissingAtDestCount + run.DifferentCount > 0;
         PreviewButton.IsEnabled = ReconcileButton.IsEnabled = actionable;
     }
 
