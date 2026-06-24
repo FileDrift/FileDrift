@@ -417,6 +417,7 @@ public partial class VerifyPage : Page
     private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
     private DateTime _lastLogAppendUtc = DateTime.MinValue;
     private RunLogger? _runLogger;
+    private string? _lastLogPath;
 
     /// <summary>Logs an important line to both the on-screen log and the run's file log.</summary>
     private void AppendLog(string line)
@@ -460,7 +461,19 @@ public partial class VerifyPage : Page
         _runLogger.WriteMany(lines);
     }
 
-    private void StartRunLog(string verb, string src, string dst) => _runLogger = RunLogger.Start(verb, src, dst);
+    private void StartRunLog(string verb, string src, string dst)
+    {
+        _runLogger = RunLogger.Start(verb, src, dst);
+        _lastLogPath = _runLogger.FilePath;
+        OpenLogButton.IsEnabled = _lastLogPath is not null; // openable during and after the run
+    }
+
+    private void OnOpenLogClick(object sender, RoutedEventArgs e)
+    {
+        if (_lastLogPath is not { } path) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
+        catch (Exception ex) { StatusText.Text = $"Couldn't open log: {ex.Message}"; }
+    }
 
     private void EndRunLog()
     {

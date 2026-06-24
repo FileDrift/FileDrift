@@ -206,9 +206,14 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </Border>
-            <ui:Button Grid.Row="2" x:Name="CopyLogButton" Content="Copy activity log" Appearance="Primary"
-                       Icon="{ui:SymbolIcon Copy24}" Margin="0,6,0,0" HorizontalAlignment="Left"
-                       Click="OnCopyLogClick" ToolTip="Copy the full activity log to the clipboard" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                <ui:Button x:Name="CopyLogButton" Content="Copy activity log" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Copy24}"
+                           Click="OnCopyLogClick" ToolTip="Copy the full activity log to the clipboard" />
+                <ui:Button x:Name="OpenLogButton" Content="Open log file" Margin="8,0,0,0" IsEnabled="False"
+                           Icon="{ui:SymbolIcon DocumentText24}"
+                           Click="OnOpenLogClick" ToolTip="Open this run's complete log file (includes the full difference list)" />
+            </StackPanel>
         </Grid>
 
         <!-- Results -->
