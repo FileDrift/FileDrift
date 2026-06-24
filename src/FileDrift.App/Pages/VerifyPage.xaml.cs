@@ -11,10 +11,10 @@ namespace FileDrift.App.Pages;
 
 public partial class VerifyPage : Page
 {
-    /// <summary>Cap on rows shown in the results grid — kept small because the grid is for spot-checking
-    /// (Reconcile acts on ALL differences, and the full list is written to the run log). Tens of thousands
-    /// of rows freeze the grid: it realizes every row during layout rather than virtualizing.</summary>
-    private const int MaxGridRows = 5_000;
+    /// <summary>Cap on rows shown in the results grid. The grid now virtualizes properly (its page has a
+    /// bounded height), so large sets render instantly; this cap just bounds the projection/memory.
+    /// Reconcile still acts on ALL differences, and the full list is always written to the run log.</summary>
+    private const int MaxGridRows = 50_000;
 
     private readonly SmartFileEnumerator _enumerator = new();
     private readonly VerifyEngine _engine;

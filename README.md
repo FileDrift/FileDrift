@@ -89,6 +89,9 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.4.4 (2026-06-24)
+- **Fixed the results freeze for real** (root cause found via a live stack capture + a layout-timing repro). The Verify page sits inside WPF-UI's content ScrollViewer, which gave it infinite height — so the results DataGrid never virtualized and arranged every row (≈28s for 20k rows). The page height is now bound to the viewport, so the grid virtualizes: the same layout drops from ~28s to ~0ms. Grid cap raised back to 50,000 since large sets now render instantly.
+
 ### 0.4.3 (2026-06-24)
 - Added an **Open log file** button next to Copy activity log — opens the current run's complete log (including the full difference list) in the default editor.
 
