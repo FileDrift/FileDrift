@@ -89,6 +89,9 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.4.6 (2026-06-24)
+- Larger default window (1280×860, was 940×640) — gives the results grid much more height for reviewing differences. Still resizable; minimum unchanged.
+
 ### 0.4.5 (2026-06-24)
 - **Results freeze fixed properly** (0.4.4's viewport binding lagged at 0 on the first layout pass, so it didn't hold — confirmed by repro showing 28s initial / freeze on nav-back). The grid now gets a stable height cap tied to the window size (set in code on load + resize), which reliably virtualizes it. Repro: 20k rows go from ~28s to ~0ms on both initial display and navigation back.
 

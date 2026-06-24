@@ -4,7 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:pages="clr-namespace:FileDrift.App.Pages"
                  Title="FileDrift"
-                 Width="940" Height="640"
+                 Width="1280" Height="860"
                  MinWidth="720" MinHeight="480"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
