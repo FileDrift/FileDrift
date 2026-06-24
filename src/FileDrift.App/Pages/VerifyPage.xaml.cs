@@ -367,8 +367,8 @@ public partial class VerifyPage : Page
             ProgressBar.IsIndeterminate = true;
         }
 
-        // Throttle the high-frequency scanning lines so a large share can't flood the UI thread
-        // with thousands of ListBox appends; always log the first line of each new phase.
+        // The progress bar + status line above carry the live view, so the log only needs to be a
+        // periodic record: throttle scan/enrich lines to one every LogThrottle. Phase changes always log.
         bool phaseChanged = p.Phase != _lastProgressPhase;
         _lastProgressPhase = p.Phase;
         if (!phaseChanged && DateTime.UtcNow - _lastLogAppendUtc < LogThrottle)
@@ -384,7 +384,7 @@ public partial class VerifyPage : Page
 
     // ── activity log ──
 
-    private static readonly TimeSpan LogThrottle = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan LogThrottle = TimeSpan.FromSeconds(2);
     private string? _lastLogged;
     private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
     private DateTime _lastLogAppendUtc = DateTime.MinValue;
