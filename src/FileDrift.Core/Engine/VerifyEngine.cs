@@ -171,8 +171,8 @@ public sealed class VerifyEngine
         }
 
         var foundMsg = skippedOld > 0
-            ? $"Found {count:N0} files (skipped {skippedOld:N0} modified before start date)"
-            : $"Found {count:N0} files";
+            ? $"Found {count:N0} entries (skipped {skippedOld:N0} modified before start date)"
+            : $"Found {count:N0} entries";
         progress?.Report(new VerifyProgress { Phase = phase, Processed = count, Total = count, Message = foundMsg });
         return map;
     }

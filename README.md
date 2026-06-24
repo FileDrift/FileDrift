@@ -89,6 +89,10 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.4.1 (2026-06-24)
+- Enumeration counts now say "entries" instead of "files" — they include folders when ACL mode is on.
+- Start/End date fields show the full date (short format), no longer truncated.
+
 ### 0.4.0 (2026-06-24)
 - **Per-run activity log files** — each verify/preflight/reconcile writes a complete, unthrottled log to `%APPDATA%\FileDrift\logs\<verb>-<timestamp>.log`. The on-screen log stays calm (throttled); the file captures every line, and survives a crash. The saved path is shown when a run finishes.
 - **Folders-only ACL scope** — with Compare ACLs on, a scope selector chooses **Files + folders** (default, complete) or **Folders only** (fast — reads only folder permissions, skipping the bulk of per-file ACL reads over SMB). Folders-only misses a permission set directly on an individual file, so the report/summary is clearly labeled "ACL scope: folders only" and accuracy stays the default. CLI: `--acl-folders-only`.

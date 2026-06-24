@@ -116,14 +116,14 @@
                         ToolTip="Optional lower bound on last-modified date. Files modified BEFORE this are ignored on BOTH sides (e.g. consolidating into a destination that already holds older content). Leave blank for no lower bound.">
                 <ui:TextBlock Text="Start" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <DatePicker x:Name="StartBox" Width="120" />
+                <DatePicker x:Name="StartBox" Width="120" SelectedDateFormat="Short" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center"
                         ToolTip="Optional upper bound on last-modified date. Destination files modified AFTER this with no source match are excluded as post-migration noise; files present on both sides are always compared. Leave blank for no upper bound.">
                 <ui:TextBlock Text="End" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <DatePicker x:Name="EndBox" Width="120" />
+                <DatePicker x:Name="EndBox" Width="120" SelectedDateFormat="Short" />
             </StackPanel>
         </WrapPanel>
 

@@ -593,7 +593,7 @@ public partial class VerifyPage : Page
         var mode = _enumerator.Source == EnumerationSource.Mft ? "MFT" : "SMB";
         var summary =
             $"Done ({mode}) — {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
-            $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest files.";
+            $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest entries.";
         if (result.ExcludedNewerCount > 0)
             summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
         if (run.Options is { IncludeAcl: true, AclScope: AclScope.FoldersOnly })
