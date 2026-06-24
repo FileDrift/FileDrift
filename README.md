@@ -89,6 +89,9 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.4.7 (2026-06-24)
+- **Reconcile Preview is now detailed and logged.** Each action shows the explicit ACEs and owner it would apply (not just "Set ACL"), the complete preview is written to its own `preview-<timestamp>.log` (openable via the Open log file button), and the on-screen list is capped at 50 with the rest in the file. Faster too — no longer dumps every action to the screen.
+
 ### 0.4.6 (2026-06-24)
 - Larger default window (1280×860, was 940×640) — gives the results grid much more height for reviewing differences. Still resizable; minimum unchanged.
 

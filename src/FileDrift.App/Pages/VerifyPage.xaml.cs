@@ -524,6 +524,17 @@ public partial class VerifyPage : Page
         return plan.TotalActions == 0 ? null : plan;
     }
 
+    /// <summary>One detailed preview line for an action, including the explicit ACEs / owner it would apply.</summary>
+    private static string DescribeAction(ReconcileAction a)
+    {
+        var s = $"{ReconcileEngine.ActionVerb(a),-13} {a.RelativePath}";
+        if (a.CopyContent) s += $"  ({FormatSize(a.SizeBytes)})";
+        if (a.ClobbersNewer) s += "  ⚠ dest newer";
+        if (a.AddExplicitAces is { Count: > 0 } aces) s += $"  +ACE: {string.Join("  ", aces)}";
+        if (a.SetOwnerSid is { } owner) s += $"  owner→{owner}";
+        return s;
+    }
+
     private void OnPreviewClick(object sender, RoutedEventArgs e)
     {
         if (BuildPlanOrNull() is not { } plan)
@@ -532,17 +543,32 @@ public partial class VerifyPage : Page
             return;
         }
 
-        AppendLog($"── Preview: {plan.CopyCount:N0} to copy, {plan.OverwriteCount:N0} to overwrite" +
-                  $"{(plan.ClobberCount > 0 ? $", {plan.ClobberCount:N0} newer at dest" : "")}" +
-                  $"{(plan.AclCount > 0 ? $", {plan.AclCount:N0} ACLs" : "")}, {FormatSize(plan.TotalBytes)} total ──");
-        foreach (var a in plan.Actions)
+        var summary = $"Preview: copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0}" +
+                      (plan.DirCreateCount > 0 ? $", create {plan.DirCreateCount:N0} folders" : "") +
+                      (plan.ClobberCount > 0 ? $", {plan.ClobberCount:N0} newer at dest" : "") +
+                      (plan.AclCount > 0 ? $", {plan.AclCount:N0} ACL change(s)" : "") +
+                      $" — {FormatSize(plan.TotalBytes)} total. No changes made.";
+
+        // Complete preview (every action + the ACEs/owner it applies) to a log file.
+        StartRunLog("preview", _lastSrc, _lastDst);
+        _runLogger?.Write(summary);
+        if (_runLogger is not null)
         {
-            var warn = a.ClobbersNewer ? "  ⚠ dest newer" : "";
-            AppendLog($"[preview] {ReconcileEngine.ActionVerb(a),-13} {a.RelativePath}  ({FormatSize(a.SizeBytes)}){warn}");
+            var lines = new List<string>(plan.TotalActions + 1) { $"── Preview actions ({plan.TotalActions:N0}) ──" };
+            lines.AddRange(plan.Actions.Select(a => "  " + DescribeAction(a)));
+            _runLogger.WriteMany(lines);
         }
-        StatusText.Text = $"Preview: would copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0}" +
-                          $"{(plan.AclCount > 0 ? $", set {plan.AclCount:N0} ACLs" : "")} " +
-                          $"({FormatSize(plan.TotalBytes)}). No changes made.";
+
+        // On screen: summary + first 50 actions; the rest is in the log file.
+        const int screenCap = 50;
+        AppendScreen($"── {summary} ──");
+        foreach (var a in plan.Actions.Take(screenCap))
+            AppendScreen("[preview] " + DescribeAction(a));
+        if (plan.TotalActions > screenCap)
+            AppendScreen($"… {plan.TotalActions - screenCap:N0} more — open the log file for the full preview.");
+
+        EndRunLog(); // closes the file, shows its path, enables "Open log file"
+        StatusText.Text = summary;
     }
 
     private async void OnReconcileClick(object sender, RoutedEventArgs e)
