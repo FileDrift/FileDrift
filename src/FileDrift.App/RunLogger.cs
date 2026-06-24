@@ -41,6 +41,19 @@ public sealed class RunLogger : IDisposable
         catch { /* best-effort */ }
     }
 
+    /// <summary>Writes many raw lines (no timestamp prefix) with a single flush — for bulk dumps
+    /// like the full difference list, where per-line flushing would be slow.</summary>
+    public void WriteMany(IEnumerable<string> lines)
+    {
+        if (_writer is null) return;
+        try
+        {
+            foreach (var line in lines) _writer.WriteLine(line);
+            _writer.Flush();
+        }
+        catch { /* best-effort */ }
+    }
+
     public void Dispose()
     {
         try { _writer?.Dispose(); }

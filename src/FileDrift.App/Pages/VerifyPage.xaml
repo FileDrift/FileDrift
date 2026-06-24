@@ -214,7 +214,10 @@
         <!-- Results -->
         <DataGrid x:Name="ResultsGrid" Grid.Row="7" AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
-                  FontSize="12" RowHeight="26">
+                  FontSize="12" RowHeight="26"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="False"
+                  ScrollViewer.CanContentScroll="True"
+                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="*" />
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />

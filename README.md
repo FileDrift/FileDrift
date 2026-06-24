@@ -89,6 +89,9 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.4.2 (2026-06-24)
+- Fix permanent freeze when displaying results of a run with many differences. The results grid wasn't virtualizing, so it tried to realize all rows (tens of thousands) at once during layout. The grid now shows the first 5,000 differences (it's for spot-checking — Reconcile still acts on all of them), the **complete difference list is written to the run's log file**, and row virtualization is enabled.
+
 ### 0.4.1 (2026-06-24)
 - Enumeration counts now say "entries" instead of "files" — they include folders when ACL mode is on.
 - Start/End date fields show the full date (short format), no longer truncated.

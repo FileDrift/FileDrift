@@ -11,9 +11,10 @@ namespace FileDrift.App.Pages;
 
 public partial class VerifyPage : Page
 {
-    /// <summary>Cap on rows shown in the results grid. Differences only — matched files are summarised
-    /// by the count tile, never listed (1M+ rows would freeze the grid).</summary>
-    private const int MaxGridRows = 100_000;
+    /// <summary>Cap on rows shown in the results grid — kept small because the grid is for spot-checking
+    /// (Reconcile acts on ALL differences, and the full list is written to the run log). Tens of thousands
+    /// of rows freeze the grid: it realizes every row during layout rather than virtualizing.</summary>
+    private const int MaxGridRows = 5_000;
 
     private readonly SmartFileEnumerator _enumerator = new();
     private readonly VerifyEngine _engine;
@@ -276,6 +277,7 @@ public partial class VerifyPage : Page
                 return (d, r);
             });
             ShowResult(result, rows);
+            LogDifferences(diffs); // complete list to the log file (grid is capped)
             _lastDiffs = diffs;
             _lastRun = result.Run;
             _lastSrc = src; _lastDst = dst;
@@ -445,6 +447,19 @@ public partial class VerifyPage : Page
         _lastLogged = null;
     }
 
+    /// <summary>Writes the complete difference list to the run's file log (the grid is capped).</summary>
+    private void LogDifferences(List<ComparisonResult> diffs)
+    {
+        if (_runLogger is null || diffs.Count == 0) return;
+        var lines = new List<string>(diffs.Count + 2) { "", $"── All differences ({diffs.Count:N0}) ──" };
+        foreach (var c in diffs.OrderBy(c => c.RelativePath, StringComparer.OrdinalIgnoreCase))
+        {
+            var detail = c.AclDetail is { } d ? $" ({d})" : "";
+            lines.Add($"  {c.Status,-14} {c.RelativePath}  [{c.Differences}{detail}]");
+        }
+        _runLogger.WriteMany(lines);
+    }
+
     private void StartRunLog(string verb, string src, string dst) => _runLogger = RunLogger.Start(verb, src, dst);
 
     private void EndRunLog()
@@ -599,7 +614,7 @@ public partial class VerifyPage : Page
         if (run.Options is { IncludeAcl: true, AclScope: AclScope.FoldersOnly })
             summary += "  (ACL scope: folders only — file permissions not checked.)";
         if (run.TotalDifferences > rows.Count)
-            summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences.)";
+            summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences — full list in the log file.)";
         StatusText.Text = summary;
         AppendLog(summary);
     }
