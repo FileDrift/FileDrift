@@ -182,4 +182,4 @@ Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` 
 
 ## License
 
-[MIT](LICENSE)
+[PolyForm Noncommercial License 1.0.0](LICENSE) – free for noncommercial use (including government, educational, and other noncommercial organizations); commercial use requires a separate license.
