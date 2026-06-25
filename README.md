@@ -101,6 +101,13 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.7.0 (2026-06-25)
+- **Live transfer rate** — during a reconcile copy, a write-throughput readout appears next to the status line (e.g. `112 MB/s`). It samples every second and shows a rolling average (~10s window) so it's not bursty, reads "–" when nothing is moving (between files, ACL-only phase), and is labelled as FileDrift's write throughput (which can briefly run ahead of the wire over buffered SMB). No ETA — by design.
+- **Preview summary banner** — running Preview now shows an inline, dismissible banner with the plan headline (`Copy 5 · Overwrite 0 · 425 ACL · 92.8 GB to write`), amber when any overwrite would replace a newer destination file. It auto-hides when a run starts; full per-file detail still goes to the preview log file.
+- **Graceful close while busy** — closing the app during an operation now asks first. A verify/preflight gets a simple confirm; a **reconcile reuses the three-way stop prompt** (Stop now / Finish current / Continue) and the app waits for the copy to actually stop — removing the in-progress partial (Stop now) or finishing the current file (Finish current) — before exiting.
+- **Synced live readouts** — the transfer rate and the activity-log rollup now refresh on the same tick, in phase, instead of drifting.
+- The activity-log refresh control is now labelled **"Live refresh"** (Verify page and Settings), since it paces both the activity log and the transfer-rate readout.
+
 ### 0.6.0 (2026-06-25)
 - **Themed dialogs** — every confirmation now uses the app's own Fluent style (WPF-UI) instead of the OS message box, so they match the window's theme, accent, and corners. Covers the Reconcile confirmation, the three-way Stop prompt, and the Settings preset prompts. The Stop prompt's buttons read **Stop now** (red) / **Finish current** / **Continue file copy**.
 - **Activity-log rollup** — during a reconcile of many small files, the throttled on-screen log now shows how many files and bytes were copied since the previous line (e.g. `+312 files, 4.2 GB · Copy …`), so it reads as a periodic summary rather than appearing to skip files. The per-run log file still records every file.

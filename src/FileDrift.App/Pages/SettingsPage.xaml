@@ -88,8 +88,8 @@
         <ui:CardControl Icon="{ui:SymbolIcon Timer24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>
-                    <ui:TextBlock Text="Activity-log refresh" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="How often the live log on the Verify page updates during a run (the log file keeps every line)"
+                    <ui:TextBlock Text="Live refresh" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="How often the live readouts on the Verify page (activity log and transfer rate) refresh during a run (the log file keeps every line)"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
             </ui:CardControl.Header>

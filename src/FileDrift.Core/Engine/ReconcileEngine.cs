@@ -107,7 +107,8 @@ public sealed class ReconcileEngine
         NetworkCredential? destCredential = null,
         IProgress<ReconcileProgress>? progress = null,
         CancellationToken hardCancel = default,
-        CancellationToken softStop = default)
+        CancellationToken softStop = default,
+        Action<long>? onLiveBytes = null)
     {
         const long ReportEvery = 32L * 1024 * 1024; // throttle byte progress so huge files don't flood
         var connections = new List<IDisposable>();
@@ -156,6 +157,7 @@ public sealed class ReconcileEngine
                         await CopyFileAsync(a.SourceFullPath, a.DestFullPath, fileBytes =>
                         {
                             long now = bytes + fileBytes;
+                            onLiveBytes?.Invoke(now); // every chunk — feeds the live transfer-rate readout
                             if (now - lastReported >= ReportEvery)
                             {
                                 lastReported = now;
@@ -169,6 +171,7 @@ public sealed class ReconcileEngine
 
                         bytes += a.SizeBytes;
                         lastReported = bytes;
+                        onLiveBytes?.Invoke(bytes);
                         if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
                     }
 

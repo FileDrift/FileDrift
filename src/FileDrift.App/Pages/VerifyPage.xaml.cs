@@ -1,6 +1,7 @@
 using System.Net;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using FileDrift.App.Settings;
 using FileDrift.Core.Engine;
 using FileDrift.Core.Interfaces;
@@ -25,6 +26,7 @@ public partial class VerifyPage : Page
     private CancellationTokenSource? _cts;            // hard cancel (abort + rollback)
     private CancellationTokenSource? _softStop;       // soft stop (finish current, stop before next) — reconcile only
     private bool _reconcileRunning;                    // OnCancelClick prompts only during a reconcile
+    private Task? _reconcileTask;                       // the running reconcile, so app-close can await its stop
     private bool _hasDefaultCredential;
 
     // Context of the last completed verify, so Reconcile/Preview can act on it. We retain ONLY the
@@ -40,6 +42,7 @@ public partial class VerifyPage : Page
         InitializeComponent();
         _engine = new VerifyEngine(_enumerator, new SqliteRunRepository());
         _preflight = new PreflightEngine(_enumerator);
+        AppActivity.RequestReconcileStopForClose = RequestStopForCloseAsync;
         Loaded += OnLoaded;
         UpdateModeReadout();
     }
@@ -96,6 +99,78 @@ public partial class VerifyPage : Page
         var s = SettingsStore.Load();
         s.LogThrottleSeconds = seconds;
         SettingsStore.Save(s);
+    }
+
+    // ── live transfer rate (reconcile only) ──
+
+    private const int RateWindowSeconds = 10; // rolling-average window; longer = smoother, less bursty
+
+    private long _liveBytes;            // cumulative bytes written, set from the copy thread (Interlocked)
+    private long _rateLastBytes;
+    private DateTime _rateLastTick;
+    private DateTime _lastRefreshUtc;   // single clock for the synced rate + activity-log refresh
+    private readonly Queue<double> _rateSamples = new(); // last few per-second rates, for smoothing
+    private ReconcileProgress? _reconLatestProgress;     // latest reconcile report, appended by the refresh tick
+    private DispatcherTimer? _rateTimer;
+
+    private void StartRateMeter()
+    {
+        Interlocked.Exchange(ref _liveBytes, 0);
+        _rateLastBytes = 0;
+        _rateLastTick = DateTime.UtcNow;
+        _lastRefreshUtc = DateTime.UtcNow;
+        _reconLatestProgress = null;
+        _rateSamples.Clear();
+        RateText.Text = "–";
+        if (_rateTimer is null)
+        {
+            _rateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _rateTimer.Tick += OnLiveRefreshTick;
+        }
+        _rateTimer.Start();
+    }
+
+    private void StopRateMeter()
+    {
+        _rateTimer?.Stop();
+        RateText.Text = "";
+    }
+
+    /// <summary>Drives both live readouts off one clock: samples throughput every second, then at the
+    /// live-refresh cadence redraws the rate AND appends the activity-log rollup together (in phase).
+    /// Rate shows "–" when nothing is moving (between files / ACL-only phase) so it doesn't read 0 B/s.</summary>
+    private void OnLiveRefreshTick(object? sender, EventArgs e)
+    {
+        var t = DateTime.UtcNow;
+
+        // Sample throughput every tick (for the rolling average), independent of the redraw cadence.
+        long now = Interlocked.Read(ref _liveBytes);
+        double secs = (t - _rateLastTick).TotalSeconds;
+        _rateLastTick = t;
+        if (secs > 0)
+        {
+            double perSec = Math.Max(0, (now - _rateLastBytes) / secs);
+            _rateLastBytes = now;
+            _rateSamples.Enqueue(perSec);
+            while (_rateSamples.Count > RateWindowSeconds) _rateSamples.Dequeue();
+        }
+
+        // Refresh the rate readout and the activity-log rollup on the same tick, at the live-refresh cadence.
+        if (t - _lastRefreshUtc < RuntimeOptions.LogThrottle) return;
+        _lastRefreshUtc = t;
+
+        double avg = _rateSamples.Count > 0 ? _rateSamples.Average() : 0;
+        RateText.Text = avg >= 1 ? $"{FormatSize((long)avg)}/s" : "–";
+
+        if (_reconLatestProgress is { Message: { } m } p)
+        {
+            long dFiles = p.Processed - _lastReconScreenProcessed;
+            long dBytes = p.BytesCopied - _lastReconScreenBytes;
+            _lastReconScreenProcessed = p.Processed;
+            _lastReconScreenBytes = p.BytesCopied;
+            AppendScreen(dFiles > 1 ? $"+{dFiles:N0} files, {FormatSize(dBytes)}  ·  {m}" : m);
+            _reconLatestProgress = null; // consumed
+        }
     }
 
     private void OnHostSizeChanged(object? sender, SizeChangedEventArgs e) => UpdateResultsMaxHeight();
@@ -438,6 +513,36 @@ public partial class VerifyPage : Page
         }
     }
 
+    /// <summary>Called by the main window when the user closes during a reconcile. Reuses the 3-way stop
+    /// workflow, then waits for the reconcile to actually stop (partial cleanup / current file finishing)
+    /// before the app closes. Returns true if the app may close, false to keep running.</summary>
+    private async Task<bool> RequestStopForCloseAsync()
+    {
+        if (!_reconcileRunning) return true; // already finished — let the close proceed
+
+        var content = Dialogs.ChoiceContent(
+            "A file is currently being copied. How do you want to close?",
+            ("Stop now", "aborts the current file, removes its partial copy, then closes."),
+            ("Finish current", "lets the current file finish, then closes."),
+            ("Continue", "keeps copying the files; the app stays open."));
+
+        var choice = await Dialogs.ChoiceAsync("Close FileDrift", content,
+            primaryText: "Stop now", secondaryText: "Finish current", closeText: "Continue",
+            primaryDanger: true);
+
+        if (choice == Wpf.Ui.Controls.MessageBoxResult.Primary)
+        { _stopMode = StopMode.Hard; _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
+        else if (choice == Wpf.Ui.Controls.MessageBoxResult.Secondary)
+        { _stopMode = StopMode.Soft; _softStop?.Cancel(); StatusText.Text = "Finishing the current file, then stopping…"; }
+        else
+            return false; // Continue → keep running, don't close
+
+        // Wait for the in-flight reconcile to stop so its cleanup/finish runs before the process exits.
+        var t = _reconcileTask;
+        if (t is not null) { try { await t; } catch { /* the reconcile's own handler reports failures */ } }
+        return true;
+    }
+
     private bool TryGetPaths(out string src, out string dst)
     {
         src = SourceBox.Text?.Trim() ?? "";
@@ -592,9 +697,22 @@ public partial class VerifyPage : Page
     {
         if (await BuildPlanOrNullAsync() is not { } plan)
         {
+            PreviewBar.IsOpen = false;
             StatusText.Text = "Nothing to reconcile – no missing or different files.";
             return;
         }
+
+        // Inline summary banner: the plan headline, prominent and non-modal (full detail still goes to the log).
+        PreviewBar.Title = "Preview – no changes made";
+        PreviewBar.Message = $"Copy {plan.CopyCount:N0} · Overwrite {plan.OverwriteCount:N0}" +
+                             (plan.DirCreateCount > 0 ? $" · Create {plan.DirCreateCount:N0} folders" : "") +
+                             (plan.ClobberCount > 0 ? $" · {plan.ClobberCount:N0} newer at dest" : "") +
+                             (plan.AclCount > 0 ? $" · {plan.AclCount:N0} ACL" : "") +
+                             $" · {FormatSize(plan.TotalBytes)} to write";
+        PreviewBar.Severity = plan.ClobberCount > 0
+            ? Wpf.Ui.Controls.InfoBarSeverity.Warning
+            : Wpf.Ui.Controls.InfoBarSeverity.Informational;
+        PreviewBar.IsOpen = true;
 
         var summary = $"Preview: copy {plan.CopyCount:N0}, overwrite {plan.OverwriteCount:N0}" +
                       (plan.DirCreateCount > 0 ? $", create {plan.DirCreateCount:N0} folders" : "") +
@@ -653,10 +771,12 @@ public partial class VerifyPage : Page
         _softStop = new CancellationTokenSource();
         _stopMode = StopMode.None;
         _reconcileRunning = true;
+        AppActivity.ReconcileRunning = true;
         SetRunning(true);
         ClearLog();
         _lastReconScreenProcessed = 0;
         _lastReconScreenBytes = 0;
+        StartRateMeter();
         StartRunLog("reconcile", _lastSrc, _lastDst);
         AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +
                   $"({FormatSize(plan.TotalBytes)}) source → destination");
@@ -680,24 +800,19 @@ public partial class VerifyPage : Page
             {
                 LogToFile(m); // every action to the file log (complete record)
                 if (p.Important)
-                    AppendScreen(m); // cleanup/important lines always shown verbatim
-                else if (DateTime.UtcNow - _lastLogAppendUtc >= RuntimeOptions.LogThrottle)
-                {
-                    // The screen log samples; show how many files/bytes were copied since the last line so
-                    // it reads as a summary, not as if files were skipped. Full per-file detail is in the log file.
-                    long dFiles = p.Processed - _lastReconScreenProcessed;
-                    long dBytes = p.BytesCopied - _lastReconScreenBytes;
-                    _lastReconScreenProcessed = p.Processed;
-                    _lastReconScreenBytes = p.BytesCopied;
-                    AppendScreen(dFiles > 1 ? $"+{dFiles:N0} files, {FormatSize(dBytes)}  ·  {m}" : m);
-                }
+                    AppendScreen(m); // cleanup/important lines always shown verbatim, immediately
+                else
+                    _reconLatestProgress = p; // the refresh tick appends a rollup, in phase with the rate readout
             }
         });
 
         try
         {
-            var result = await Task.Run(() => _reconcile.ExecuteAsync(
-                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token, _softStop.Token));
+            Action<long> onLive = b => Interlocked.Exchange(ref _liveBytes, b);
+            var runTask = Task.Run(() => _reconcile.ExecuteAsync(
+                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token, _softStop.Token, onLive));
+            _reconcileTask = runTask; // non-generic handle so app-close can await the stop
+            var result = await runTask;
 
             ProgressBar.Value = result.Stopped ? ProgressBar.Value : 100;
             var verb = result.Stopped ? "Reconcile stopped" : "Reconcile done";
@@ -726,7 +841,10 @@ public partial class VerifyPage : Page
         finally
         {
             _reconcileRunning = false;
+            AppActivity.ReconcileRunning = false;
+            _reconcileTask = null;
             _stopMode = StopMode.None;
+            StopRateMeter();
             EndRunLog(); SetRunning(false);
             _cts?.Dispose(); _cts = null;
             _softStop?.Dispose(); _softStop = null;
@@ -781,6 +899,7 @@ public partial class VerifyPage : Page
     private void SetRunning(bool running)
     {
         _running = running;
+        AppActivity.OperationRunning = running; // so the main window can warn on close mid-operation
         VerifyButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         PreflightButton.IsEnabled = !running;
@@ -792,6 +911,7 @@ public partial class VerifyPage : Page
         if (running)
         {
             PreviewButton.IsEnabled = ReconcileButton.IsEnabled = false;
+            PreviewBar.IsOpen = false; // a stale preview no longer reflects what's about to happen
         }
         else
         {
