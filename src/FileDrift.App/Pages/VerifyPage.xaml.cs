@@ -1,6 +1,7 @@
 using System.Net;
 using System.Windows;
 using System.Windows.Controls;
+using FileDrift.App.Settings;
 using FileDrift.Core.Engine;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
@@ -21,7 +22,9 @@ public partial class VerifyPage : Page
     private readonly PreflightEngine _preflight;
     private readonly ReconcileEngine _reconcile = new();
     private readonly ICredentialStore _credentials = new WindowsCredentialStore();
-    private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _cts;            // hard cancel (abort + rollback)
+    private CancellationTokenSource? _softStop;       // soft stop (finish current, stop before next) — reconcile only
+    private bool _reconcileRunning;                    // OnCancelClick prompts only during a reconcile
     private bool _hasDefaultCredential;
 
     // Context of the last completed verify, so Reconcile/Preview can act on it. We retain ONLY the
@@ -383,8 +386,25 @@ public partial class VerifyPage : Page
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
     {
-        _cts?.Cancel();
-        StatusText.Text = "Cancelling…";
+        // Reconcile writes files, so offer a choice; verify/preflight are read-only and just stop.
+        if (_reconcileRunning)
+        {
+            var choice = MessageBox.Show(
+                "A file is currently being copied. How do you want to stop?\n\n" +
+                "Yes  —  Stop now: abort the current file and delete its partial copy.\n" +
+                "No  —  Finish the current file, then stop.\n" +
+                "Cancel  —  Keep going (don't stop).",
+                "Stop Reconcile", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
+
+            if (choice == MessageBoxResult.Yes) { _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
+            else if (choice == MessageBoxResult.No) { _softStop?.Cancel(); StatusText.Text = "Finishing current file, then stopping…"; }
+            // Cancel / dismissed → keep going
+        }
+        else
+        {
+            _cts?.Cancel();
+            StatusText.Text = "Cancelling…";
+        }
     }
 
     private bool TryGetPaths(out string src, out string dst)
@@ -427,13 +447,12 @@ public partial class VerifyPage : Page
         LogToFile(line);
         bool phaseChanged = p.Phase != _lastProgressPhase;
         _lastProgressPhase = p.Phase;
-        if (phaseChanged || DateTime.UtcNow - _lastLogAppendUtc >= LogThrottle)
+        if (phaseChanged || DateTime.UtcNow - _lastLogAppendUtc >= RuntimeOptions.LogThrottle)
             AppendScreen(line);
     }
 
     // ── activity log ──
 
-    private static readonly TimeSpan LogThrottle = TimeSpan.FromSeconds(2);
     private string? _lastLogged;
     private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
     private DateTime _lastLogAppendUtc = DateTime.MinValue;
@@ -515,12 +534,13 @@ public partial class VerifyPage : Page
 
     // ── reconcile ──
 
-    private ReconcilePlan? BuildPlanOrNull()
+    // Built off the UI thread — over ~38k diffs (each parsing folder SDDL) it's a noticeable pause.
+    private async Task<ReconcilePlan?> BuildPlanOrNullAsync()
     {
         if (_lastDiffs is not { } diffs || _lastRun is not { } run) return null;
         // ACL reconciliation is driven by whether the verify compared ACLs / enforced ownership.
-        var plan = ReconcileEngine.BuildPlan(
-            diffs, _lastDst, run.Options.IncludeAcl, run.Options.EnforceOwnership);
+        var plan = await Task.Run(() => ReconcileEngine.BuildPlan(
+            diffs, _lastDst, run.Options.IncludeAcl, run.Options.EnforceOwnership));
         return plan.TotalActions == 0 ? null : plan;
     }
 
@@ -530,14 +550,14 @@ public partial class VerifyPage : Page
         var s = $"{ReconcileEngine.ActionVerb(a),-13} {a.RelativePath}";
         if (a.CopyContent) s += $"  ({FormatSize(a.SizeBytes)})";
         if (a.ClobbersNewer) s += "  ⚠ dest newer";
-        if (a.AddExplicitAces is { Count: > 0 } aces) s += $"  +ACE: {string.Join("  ", aces)}";
-        if (a.SetOwnerSid is { } owner) s += $"  owner→{owner}";
+        if (a.AddExplicitAces is { Count: > 0 } aces) s += $"  +ACE: {string.Join("  |  ", aces.Select(AclReadable.Ace))}";
+        if (a.SetOwnerSid is { } owner) s += $"  owner→{AclReadable.Trustee(owner)}";
         return s;
     }
 
-    private void OnPreviewClick(object sender, RoutedEventArgs e)
+    private async void OnPreviewClick(object sender, RoutedEventArgs e)
     {
-        if (BuildPlanOrNull() is not { } plan)
+        if (await BuildPlanOrNullAsync() is not { } plan)
         {
             StatusText.Text = "Nothing to reconcile — no missing or different files.";
             return;
@@ -573,7 +593,7 @@ public partial class VerifyPage : Page
 
     private async void OnReconcileClick(object sender, RoutedEventArgs e)
     {
-        if (BuildPlanOrNull() is not { } plan)
+        if (await BuildPlanOrNullAsync() is not { } plan)
         {
             StatusText.Text = "Nothing to reconcile — no missing or different files.";
             return;
@@ -585,8 +605,8 @@ public partial class VerifyPage : Page
                   (plan.DirCreateCount > 0 ? $"    • Create {plan.DirCreateCount:N0} missing folder(s)\n" : "") +
                   (plan.AclCount > 0 ? $"    • Add source permissions (ACLs) to {plan.AclCount:N0} item(s)\n" : "") +
                   $"\nTotal to write: {FormatSize(plan.TotalBytes)}.\n" +
-                  $"The source is the source of truth — nothing on the destination is deleted or removed " +
-                  $"(ACLs are added, never stripped).";
+                  $"Non-destructive: files that exist only on the destination are kept, and permissions are " +
+                  $"only added — never removed. (Differing files are overwritten with the source.)";
         if (plan.ClobberCount > 0)
             msg += $"\n\n⚠ WARNING: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
                    $"NEWER than the source. Their newer content will be lost.";
@@ -599,6 +619,8 @@ public partial class VerifyPage : Page
         if (choice != MessageBoxResult.Yes) return;
 
         _cts = new CancellationTokenSource();
+        _softStop = new CancellationTokenSource();
+        _reconcileRunning = true;
         SetRunning(true);
         ClearLog();
         StartRunLog("reconcile", _lastSrc, _lastDst);
@@ -607,29 +629,31 @@ public partial class VerifyPage : Page
 
         var progress = new Progress<ReconcileProgress>(p =>
         {
-            if (p.Total > 0)
+            if (p.TotalBytes > 0)
             {
                 ProgressBar.IsIndeterminate = false;
-                ProgressBar.Value = Math.Min(100, p.Processed * 100.0 / p.Total);
+                ProgressBar.Value = Math.Min(100, p.BytesCopied * 100.0 / p.TotalBytes);
             }
-            StatusText.Text = $"Reconciling {p.Processed:N0}/{p.Total:N0}…";
+            StatusText.Text = $"Reconciling {p.Processed:N0}/{p.Total:N0} — {FormatSize(p.BytesCopied)} / {FormatSize(p.TotalBytes)}";
             if (p.Message is { } m)
             {
                 LogToFile(m); // every action to the file log
-                if (DateTime.UtcNow - _lastLogAppendUtc >= LogThrottle) AppendScreen(m); // throttled on screen
+                if (DateTime.UtcNow - _lastLogAppendUtc >= RuntimeOptions.LogThrottle) AppendScreen(m); // throttled on screen
             }
         });
 
         try
         {
             var result = await Task.Run(() => _reconcile.ExecuteAsync(
-                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token));
+                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token, _softStop.Token));
 
-            ProgressBar.Value = 100;
-            var summary = $"Reconcile done — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
+            ProgressBar.Value = result.Stopped ? ProgressBar.Value : 100;
+            var verb = result.Stopped ? "Reconcile stopped" : "Reconcile done";
+            var summary = $"{verb} — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
                           $"{FormatSize(result.BytesCopied)} written" +
                           (result.DirectoriesCreated > 0 ? $", {result.DirectoriesCreated:N0} folders created" : "") +
                           (result.AclsApplied > 0 ? $", {result.AclsApplied:N0} ACLs updated" : "") +
+                          (result.PartialsRemoved > 0 ? $", {result.PartialsRemoved:N0} partial removed" : "") +
                           (result.FailureCount > 0 ? $", {result.FailureCount:N0} failed." : ".");
             StatusText.Text = summary;
             AppendLog(summary);
@@ -641,14 +665,19 @@ public partial class VerifyPage : Page
             _lastRun = null;
             AppendLog("Re-run Verify to confirm the destination now matches.");
         }
-        catch (OperationCanceledException) { StatusText.Text = "Reconcile cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
         catch (Exception ex)
         {
             var m = $"Reconcile error: {ex.GetType().Name} — {ex.Message}";
             StatusText.Text = m;
             AppendLog(m);
         }
-        finally { EndRunLog(); SetRunning(false); _cts?.Dispose(); _cts = null; }
+        finally
+        {
+            _reconcileRunning = false;
+            EndRunLog(); SetRunning(false);
+            _cts?.Dispose(); _cts = null;
+            _softStop?.Dispose(); _softStop = null;
+        }
     }
 
     private void ShowResult(VerifyResult result, List<ComparisonRow> rows)

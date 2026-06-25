@@ -55,6 +55,53 @@
             <ComboBox x:Name="TitleBarBox" Width="170" SelectionChanged="OnManualChanged" />
         </ui:CardControl>
 
+        <ui:CardControl Icon="{ui:SymbolIcon Color24}" Margin="0,0,0,10">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Custom accent (hex)" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Type a #RRGGBB color and click Set to use it as the accent"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border x:Name="HexSwatch" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}" />
+                <ui:TextBox x:Name="HexBox" Width="110" PlaceholderText="#RRGGBB" TextChanged="OnHexTextChanged" />
+                <ui:Button x:Name="HexSetButton" Content="Set" Margin="8,0,0,0" Click="OnHexSet" />
+            </StackPanel>
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon Save24}" Margin="0,0,0,10">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Save current as preset" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="Stores the current theme and colors under a name (presets.json)"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:TextBox x:Name="PresetNameBox" Width="150" PlaceholderText="Preset name" />
+                <ui:Button x:Name="SavePresetButton" Content="Save" Margin="8,0,0,0" Click="OnSavePreset" />
+            </StackPanel>
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon Timer24}" Margin="0,0,0,10">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="Activity-log refresh" FontTypography="BodyStrong" />
+                    <ui:TextBlock Text="How often the live log on the Verify page updates during a run (the log file keeps every line)"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Slider x:Name="LogThrottleSlider" Width="170" Minimum="0.5" Maximum="10"
+                        TickFrequency="0.5" IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                        ValueChanged="OnLogThrottleChanged" />
+                <ui:TextBlock x:Name="LogThrottleValue" Text="3.0 s" Width="48" Margin="10,0,0,0"
+                              VerticalAlignment="Center" HorizontalAlignment="Right" />
+            </StackPanel>
+        </ui:CardControl>
+
         <ui:CardControl Icon="{ui:SymbolIcon Info24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>

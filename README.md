@@ -4,6 +4,8 @@ File comparison and verification tool for Windows. Compares source and destinati
 
 ![FileDrift wordmark](FileDrift-wordmark.png)
 
+> **A note on authorship:** the code in this project is generated in its entirety by [Claude Code](https://claude.com/claude-code) (Anthropic's AI coding agent), directed and reviewed by the maintainer. This is stated up front in the interest of transparency — some people are rightly particular about AI-generated code, and you should weigh that for your own environment.
+
 ---
 
 ## Use cases
@@ -56,6 +58,16 @@ FileDrift automatically selects the enumeration method based on the target path:
 
 Running FileDrift on the file server itself unlocks MFT enumeration for large local jobs. Remote share mode still benefits significantly from parallelism versus sequential `Get-ChildItem`.
 
+## Where to run FileDrift
+
+For a reconcile (copy) job, the machine you run FileDrift from affects both throughput and reliability:
+
+- **On the destination server (recommended).** Writes and ACL changes are local, and only the source is read over the network. This is the best choice for many-small-files jobs, where per-file round-trips dominate — keeping the writes local eliminates roughly half of them. It also avoids the Kerberos double-hop problem and runs ACL changes locally rather than against a remote target.
+- **On the source server (second choice).** Use this when you cannot run on the destination (for example, the destination is a NAS or appliance). Source reads are local; only the writes cross the network.
+- **On a third machine or your laptop (avoid for large jobs).** Copy data flows source → this machine → destination, which is two network hops and roughly double the wire traffic. Copying between two remote servers from a third box can also trigger the Kerberos double-hop "access denied" problem. Acceptable for small, ad-hoc jobs; not for a migration.
+
+Hashing (Full depth) and ACL processing happen wherever FileDrift runs, so use a capable host — not an underpowered laptop — for large verifies. Note also that MFT enumeration only works on a local NTFS volume, so running on the source or destination unlocks it for that side.
+
 ## Verify depth
 
 | Flag | Checks |
@@ -88,6 +100,15 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 0.5.0 (2026-06-25)
+- **Byte-level Reconcile progress** — the progress bar and status now advance *within* a file as it copies (bytes copied / total bytes), not just once per completed file. A job of a few very large files no longer looks frozen for minutes at a time.
+- **Cancel refinement** — the Cancel button is now red (it appears only during a run). Cancelling a Reconcile mid-copy prompts for how to stop: **Stop now** (abort the current file and delete its partial copy), **Finish current** (let the file in progress complete, then stop before the next), or **Continue file copy**. Verify and Preflight are read-only and still stop immediately. The summary reports how many files copied and whether a partial was removed.
+- **Human-readable ACLs** — Reconcile Preview and the report now translate raw SDDL into plain language (for example `A;;FA;;;BA` becomes "Allow Administrators: Full control"), resolving well-known and domain accounts, combined rights, and hex access masks, with a fallback to the raw SID when a name can't be resolved.
+- **Activity-log refresh slider** — the on-screen activity log's refresh interval is now configurable in Settings (default 3s, floor 0.5s) and takes effect **live during a run**. The per-run log *file* still records every line.
+- **Presets** — added a **Default** entry that resets appearance to the system theme and stock colors, the ability to **save the current theme and colors as a named preset** (stored in `presets.json`), and a **custom accent hex input** with a live preview swatch.
+- **Remember window size and position** — the main window's size, position, and maximized state are restored on the next launch, clamped to the visible screen if a monitor has gone away.
+- **Off-thread plan build** — Reconcile's plan is now built off the UI thread, removing the brief pause on Preview/Reconcile for large difference sets.
 
 ### 0.4.7 (2026-06-24)
 - **Reconcile Preview is now detailed and logged.** Each action shows the explicit ACEs and owner it would apply (not just "Set ACL"), the complete preview is written to its own `preview-<timestamp>.log` (openable via the Open log file button), and the on-screen list is capped at 50 with the rest in the file. Faster too — no longer dumps every action to the screen.

@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using FileDrift.App.Settings;
 using FileDrift.Core.Persistence;
 
@@ -15,9 +17,7 @@ public partial class SettingsPage : Page
 
         var settings = SettingsStore.Load();
 
-        PresetBox.Items.Add(new ComboBoxItem { Content = ColorPresets.Custom });
-        foreach (var preset in ColorPresets.All)
-            PresetBox.Items.Add(new ComboBoxItem { Content = preset.Name });
+        PopulatePresetBox();
         Select(PresetBox, settings.Preset);
 
         Select(ThemeBox, settings.Theme); // System / Light / Dark
@@ -31,11 +31,28 @@ public partial class SettingsPage : Page
             TitleBarBox.Items.Add(new ComboBoxItem { Content = name });
         Select(TitleBarBox, settings.TitleBar);
 
+        if (settings.Accent.StartsWith('#')) HexBox.Text = settings.Accent;
+        UpdateHexSwatch(HexBox.Text);
+
+        LogThrottleSlider.Value = settings.LogThrottleSeconds;
+        LogThrottleValue.Text = $"{settings.LogThrottleSeconds:0.0} s";
+
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = version is null ? "unknown" : $"FileDrift {version.Major}.{version.Minor}.{version.Build}";
         DbPathText.Text = AppPaths.HistoryDatabase;
 
         _suppress = false;
+    }
+
+    private void PopulatePresetBox()
+    {
+        PresetBox.Items.Clear();
+        PresetBox.Items.Add(new ComboBoxItem { Content = ColorPresets.Default });
+        PresetBox.Items.Add(new ComboBoxItem { Content = ColorPresets.Custom });
+        foreach (var p in ColorPresets.BuiltIn)
+            PresetBox.Items.Add(new ComboBoxItem { Content = p.Name });
+        foreach (var p in PresetStore.Load())
+            PresetBox.Items.Add(new ComboBoxItem { Content = p.Name });
     }
 
     private void OnPresetChanged(object sender, SelectionChangedEventArgs e)
@@ -46,19 +63,33 @@ public partial class SettingsPage : Page
         if (name is null || string.Equals(name, ColorPresets.Custom, StringComparison.OrdinalIgnoreCase))
             return; // "Custom" is set implicitly by manual edits; selecting it changes nothing
 
-        if (ColorPresets.Find(name) is not { } preset) return;
+        if (string.Equals(name, ColorPresets.Default, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyPreset(ColorPresets.DefaultPreset);
+            return;
+        }
 
+        if (ColorPresets.Find(name) is { } preset)
+            ApplyPreset(preset);
+    }
+
+    private void ApplyPreset(ColorPreset preset)
+    {
         var settings = new AppSettings
         {
             Preset = preset.Name,
-            Theme = "Light",
+            Theme = preset.Theme,
             Accent = preset.Accent,
             TitleBar = preset.TitleBar,
             Background = preset.Background,
+            LogThrottleSeconds = LogThrottleSlider.Value,
         };
 
         _suppress = true;
-        Select(ThemeBox, "Light"); // presets are Light-based
+        Select(ThemeBox, preset.Theme);
+        if (preset.Accent.StartsWith('#')) HexBox.Text = preset.Accent;
+        else { HexBox.Text = ""; Select(AccentBox, preset.Accent); }
+        UpdateHexSwatch(HexBox.Text);
         _suppress = false;
 
         AppearanceApplier.Apply(settings);
@@ -68,15 +99,28 @@ public partial class SettingsPage : Page
     private void OnManualChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppress) return;
+        if (ReferenceEquals(sender, AccentBox)) HexBox.Text = ""; // picking a named accent drops the hex override
+        ApplyManual();
+    }
 
-        // Any manual edit drops to Custom and clears the preset's background tint.
+    private void OnHexSet(object sender, RoutedEventArgs e)
+    {
+        if (!TryParseHex(HexBox.Text, out _)) return;
+        ApplyManual();
+    }
+
+    /// <summary>Applies the current control state as a Custom appearance. A valid hex in the box wins
+    /// over the named accent; the background tint is cleared (presets own backgrounds, not manual edits).</summary>
+    private void ApplyManual()
+    {
         var settings = new AppSettings
         {
             Preset = ColorPresets.Custom,
             Theme = SelectedText(ThemeBox) ?? "Light",
-            Accent = SelectedText(AccentBox) ?? "Default (blue)",
+            Accent = CurrentAccent(),
             TitleBar = SelectedText(TitleBarBox) ?? "Default",
             Background = "Default",
+            LogThrottleSeconds = LogThrottleSlider.Value,
         };
 
         _suppress = true;
@@ -84,6 +128,74 @@ public partial class SettingsPage : Page
         _suppress = false;
 
         AppearanceApplier.Apply(settings);
+        SettingsStore.Save(settings);
+    }
+
+    private string CurrentAccent() =>
+        TryParseHex(HexBox.Text, out _) ? HexBox.Text.Trim() : (SelectedText(AccentBox) ?? "Default (blue)");
+
+    private void OnHexTextChanged(object sender, TextChangedEventArgs e) => UpdateHexSwatch(HexBox.Text);
+
+    private void UpdateHexSwatch(string? value)
+    {
+        if (HexSwatch is null) return;
+        if (TryParseHex(value, out var color))
+        {
+            HexSwatch.Background = new SolidColorBrush(color);
+            if (HexSetButton is not null) HexSetButton.IsEnabled = true;
+        }
+        else
+        {
+            HexSwatch.ClearValue(Border.BackgroundProperty);
+            if (HexSetButton is not null) HexSetButton.IsEnabled = false;
+        }
+    }
+
+    private static bool TryParseHex(string? value, out Color color)
+    {
+        color = default;
+        if (string.IsNullOrWhiteSpace(value) || !value.TrimStart().StartsWith('#')) return false;
+        try { color = (Color)ColorConverter.ConvertFromString(value.Trim())!; return true; }
+        catch { return false; }
+    }
+
+    private void OnSavePreset(object sender, RoutedEventArgs e)
+    {
+        var name = PresetNameBox.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            MessageBox.Show("Enter a name for the preset.", "Save preset", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (ColorPresets.IsReserved(name))
+        {
+            MessageBox.Show($"\"{name}\" is reserved. Choose a different name.", "Save preset",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var current = SettingsStore.Load();
+        PresetStore.Save(new ColorPreset(name, current.Theme, current.Accent, current.TitleBar, current.Background));
+
+        _suppress = true;
+        PopulatePresetBox();
+        Select(PresetBox, name);
+        _suppress = false;
+
+        current.Preset = name;
+        SettingsStore.Save(current);
+        PresetNameBox.Text = "";
+    }
+
+    private void OnLogThrottleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        var seconds = e.NewValue;
+        if (LogThrottleValue is not null) LogThrottleValue.Text = $"{seconds:0.0} s";
+        RuntimeOptions.SetLogThrottle(seconds); // live: an in-flight run picks this up on its next tick
+        if (_suppress) return;
+
+        var settings = SettingsStore.Load();
+        settings.LogThrottleSeconds = seconds;
         SettingsStore.Save(settings);
     }
 

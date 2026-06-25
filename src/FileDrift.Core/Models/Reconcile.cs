@@ -63,6 +63,11 @@ public sealed class ReconcileProgress
     public required int Processed { get; init; }
     public required int Total { get; init; }
     public string? Message { get; init; }
+
+    /// <summary>Total bytes copied so far across all files (for a byte-accurate progress bar).</summary>
+    public long BytesCopied { get; init; }
+    /// <summary>Total bytes the plan will write (plan.TotalBytes).</summary>
+    public long TotalBytes { get; init; }
 }
 
 /// <summary>A file that could not be copied during reconcile.</summary>
@@ -84,6 +89,12 @@ public sealed class ReconcileResult
 
     /// <summary>How many missing destination folders were created.</summary>
     public int DirectoriesCreated { get; init; }
+
+    /// <summary>True if the run stopped early (cancelled) before processing every action.</summary>
+    public bool Stopped { get; init; }
+
+    /// <summary>How many partially-written destination files were deleted on a hard cancel.</summary>
+    public int PartialsRemoved { get; init; }
 
     public int FailureCount => Failures.Count;
 }

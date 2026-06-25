@@ -96,7 +96,9 @@ public sealed class ReconcileEngine
 
     /// <summary>Executes the plan, copying each file source→destination. Authenticates UNC shares
     /// with the supplied credentials (the destination credential needs write access). Per-file
-    /// errors are collected rather than aborting the whole run.</summary>
+    /// errors are collected rather than aborting the whole run. Two stop signals:
+    /// <paramref name="hardCancel"/> aborts the in-flight file mid-copy and deletes the partial, then
+    /// stops; <paramref name="softStop"/> lets the current file finish, then stops before the next.</summary>
     public async Task<ReconcileResult> ExecuteAsync(
         ReconcilePlan plan,
         string sourcePath,
@@ -104,11 +106,15 @@ public sealed class ReconcileEngine
         NetworkCredential? sourceCredential = null,
         NetworkCredential? destCredential = null,
         IProgress<ReconcileProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken hardCancel = default,
+        CancellationToken softStop = default)
     {
+        const long ReportEvery = 32L * 1024 * 1024; // throttle byte progress so huge files don't flood
         var connections = new List<IDisposable>();
-        int copied = 0, overwritten = 0, aclsApplied = 0, dirsCreated = 0;
-        long bytes = 0;
+        int copied = 0, overwritten = 0, aclsApplied = 0, dirsCreated = 0, partialsRemoved = 0;
+        long bytes = 0, lastReported = 0;
+        long totalBytes = plan.TotalBytes;
+        bool stopped = false;
         var failures = new List<ReconcileFailure>();
 
         try
@@ -121,7 +127,13 @@ public sealed class ReconcileEngine
             int total = plan.Actions.Count, n = 0;
             foreach (var a in plan.Actions)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                // Stop before starting the next file. A soft stop reaches here only after the current
+                // file finished; a hard cancel between files also stops here.
+                if (hardCancel.IsCancellationRequested || softStop.IsCancellationRequested)
+                {
+                    stopped = true;
+                    break;
+                }
                 n++;
                 try
                 {
@@ -133,9 +145,23 @@ public sealed class ReconcileEngine
 
                     if (a.CopyContent)
                     {
-                        await CopyFileAsync(a.SourceFullPath, a.DestFullPath, cancellationToken);
-                        if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
+                        await CopyFileAsync(a.SourceFullPath, a.DestFullPath, fileBytes =>
+                        {
+                            long now = bytes + fileBytes;
+                            if (now - lastReported >= ReportEvery)
+                            {
+                                lastReported = now;
+                                progress?.Report(new ReconcileProgress
+                                {
+                                    Processed = n, Total = total, BytesCopied = now, TotalBytes = totalBytes,
+                                    Message = $"Copying {a.RelativePath}",
+                                });
+                            }
+                        }, hardCancel);
+
                         bytes += a.SizeBytes;
+                        lastReported = bytes;
+                        if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
                     }
 
                     bool aclTouched = false;
@@ -153,7 +179,13 @@ public sealed class ReconcileEngine
                     }
                     if (aclTouched) aclsApplied++;
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException)
+                {
+                    // Hard cancel mid-file: remove the partially-written destination file, then stop.
+                    if (a.CopyContent && TryDeletePartial(a.DestFullPath)) partialsRemoved++;
+                    stopped = true;
+                    break;
+                }
                 catch (Exception ex)
                 {
                     failures.Add(new ReconcileFailure
@@ -165,8 +197,7 @@ public sealed class ReconcileEngine
 
                 progress?.Report(new ReconcileProgress
                 {
-                    Processed = n,
-                    Total = total,
+                    Processed = n, Total = total, BytesCopied = bytes, TotalBytes = totalBytes,
                     Message = $"{ActionVerb(a)} {a.RelativePath}",
                 });
             }
@@ -184,8 +215,17 @@ public sealed class ReconcileEngine
             BytesCopied = bytes,
             AclsApplied = aclsApplied,
             DirectoriesCreated = dirsCreated,
+            Stopped = stopped,
+            PartialsRemoved = partialsRemoved,
             Failures = failures,
         };
+    }
+
+    private static bool TryDeletePartial(string path)
+    {
+        try { if (File.Exists(path)) { File.Delete(path); return true; } }
+        catch { /* best-effort cleanup */ }
+        return false;
     }
 
     /// <summary>Describes what an action does, for progress/log display.</summary>
@@ -207,7 +247,10 @@ public sealed class ReconcileEngine
         };
     }
 
-    private static async Task CopyFileAsync(string source, string dest, CancellationToken ct)
+    /// <summary>Copies a file in buffer-sized chunks, invoking <paramref name="onFileBytes"/> with the
+    /// running per-file byte count after each chunk (for live progress). Honors cancellation between
+    /// chunks (within a buffer), so a hard cancel stops promptly.</summary>
+    private static async Task CopyFileAsync(string source, string dest, Action<long> onFileBytes, CancellationToken ct)
     {
         var dir = Path.GetDirectoryName(dest);
         if (!string.IsNullOrEmpty(dir))
@@ -218,7 +261,15 @@ public sealed class ReconcileEngine
         await using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
                          BufferSize, FileOptions.Asynchronous))
         {
-            await src.CopyToAsync(dst, BufferSize, ct);
+            var buffer = new byte[BufferSize];
+            long fileBytes = 0;
+            int read;
+            while ((read = await src.ReadAsync(buffer, ct)) > 0)
+            {
+                await dst.WriteAsync(buffer.AsMemory(0, read), ct);
+                fileBytes += read;
+                onFileBytes(fileBytes);
+            }
         }
 
         // Preserve source timestamps so a follow-up verify reports the pair as matched.

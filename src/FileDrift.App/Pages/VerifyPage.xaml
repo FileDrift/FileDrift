@@ -135,7 +135,7 @@
                            ToolTip="Validate access and counts before verifying — run this first" />
                 <ui:Button x:Name="VerifyButton" Content="Verify" Appearance="Primary" Margin="8,0,0,0"
                            Icon="{ui:SymbolIcon Play24}" Click="OnVerifyClick" />
-                <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0"
+                <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0" Appearance="Danger"
                            Icon="{ui:SymbolIcon Stop24}" Click="OnCancelClick" Visibility="Collapsed" />
                 <Border Width="1" Margin="12,2,12,2" Background="{DynamicResource ControlElevationBorderBrush}" />
                 <ui:Button x:Name="PreviewButton" Content="Preview" IsEnabled="False"

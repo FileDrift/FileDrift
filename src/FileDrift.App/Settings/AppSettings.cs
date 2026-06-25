@@ -17,4 +17,15 @@ public sealed class AppSettings
 
     /// <summary>Window background: "Default" (Mica) or a #hex tint.</summary>
     public string Background { get; set; } = "Default";
+
+    /// <summary>How often (seconds) the on-screen activity log refreshes during a run. Floor 0.5s; default 3s.
+    /// The full per-line history still goes to the run-log file — this only throttles the live view.</summary>
+    public double LogThrottleSeconds { get; set; } = 3.0;
+
+    // ── window placement (restored next launch; position is clamped to the visible screen) ──
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
+    public double WindowWidth { get; set; } = 1280;
+    public double WindowHeight { get; set; } = 860;
+    public bool WindowMaximized { get; set; }
 }

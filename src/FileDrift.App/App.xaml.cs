@@ -35,7 +35,9 @@ public partial class App : Application
         }
 
         // GUI mode: restore saved appearance, then show the window.
-        AppearanceApplier.Apply(SettingsStore.Load());
+        var settings = SettingsStore.Load();
+        RuntimeOptions.SetLogThrottle(settings.LogThrottleSeconds);
+        AppearanceApplier.Apply(settings);
         var window = new MainWindow();
         window.Show();
     }

@@ -66,6 +66,18 @@ internal static class AclMethods
         IntPtr securityDescriptor, [MarshalAs(UnmanagedType.Bool)] out bool daclPresent,
         out IntPtr dacl, [MarshalAs(UnmanagedType.Bool)] out bool daclDefaulted);
 
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ConvertStringSidToSidW(string stringSid, out IntPtr sid);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool LookupAccountSidW(
+        string? systemName, IntPtr sid,
+        System.Text.StringBuilder? name, ref uint cchName,
+        System.Text.StringBuilder? referencedDomainName, ref uint cchReferencedDomainName,
+        out int peUse);
+
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
     internal static extern int SetNamedSecurityInfoW(
         string pObjectName,
