@@ -68,6 +68,10 @@ public sealed class ReconcileProgress
     public long BytesCopied { get; init; }
     /// <summary>Total bytes the plan will write (plan.TotalBytes).</summary>
     public long TotalBytes { get; init; }
+
+    /// <summary>When set, the on-screen log should show <see cref="Message"/> verbatim regardless of
+    /// throttling (e.g. a cleanup notice). Routine per-file progress leaves this false.</summary>
+    public bool Important { get; init; }
 }
 
 /// <summary>A file that could not be copied during reconcile.</summary>

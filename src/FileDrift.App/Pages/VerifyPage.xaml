@@ -81,14 +81,14 @@
 
             <ComboBox x:Name="AclScopeBox" Width="128" Margin="0,0,18,8" VerticalAlignment="Center" SelectedIndex="0" IsEnabled="False"
                       ToolTipService.ShowOnDisabled="True"
-                      ToolTip="ACL scope. Files + folders = complete (reads every file's permissions; slow). Folders only = fast (reads folder permissions only — explicit perms usually live on folders), but misses a permission set directly on an individual file.">
+                      ToolTip="ACL scope. Files + folders = complete (reads every file's permissions; slow). Folders only = fast (reads folder permissions only – explicit perms usually live on folders), but misses a permission set directly on an individual file.">
                 <ComboBoxItem Content="Files + folders" />
                 <ComboBoxItem Content="Folders only" />
             </ComboBox>
 
             <ui:ToggleSwitch x:Name="OwnerSwitch" Content="Enforce ownership" Margin="0,0,18,8" VerticalAlignment="Center"
                              ToolTipService.ShowOnDisabled="True"
-                             ToolTip="Only applies with Compare ACLs. Also require the owner to match (and copy it on reconcile). Off by default — owners often differ across servers without being meaningful drift." />
+                             ToolTip="Only applies with Compare ACLs. Also require the owner to match (and copy it on reconcile). Off by default – owners often differ across servers without being meaningful drift." />
 
             <ui:ToggleSwitch x:Name="StrictSwitch" Content="Strict Mode" Margin="0,0,18,8" VerticalAlignment="Center"
                              Checked="OnStrictChanged" Unchecked="OnStrictChanged"
@@ -132,7 +132,7 @@
             <StackPanel Orientation="Horizontal">
                 <ui:Button x:Name="PreflightButton" Content="Preflight"
                            Icon="{ui:SymbolIcon Search24}" Click="OnPreflightClick"
-                           ToolTip="Validate access and counts before verifying — run this first" />
+                           ToolTip="Validate access and counts before verifying – run this first" />
                 <ui:Button x:Name="VerifyButton" Content="Verify" Appearance="Primary" Margin="8,0,0,0"
                            Icon="{ui:SymbolIcon Play24}" Click="OnVerifyClick" />
                 <ui:Button x:Name="CancelButton" Content="Cancel" Margin="8,0,0,0" Appearance="Danger"
@@ -161,25 +161,25 @@
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="0,0,5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="MatchedLabel" Text="Matched" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    <ui:TextBlock x:Name="MatchedText" Text="—" FontTypography="BodyStrong" FontSize="18" />
+                    <ui:TextBlock x:Name="MatchedText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="DifferentLabel" Text="Different" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    <ui:TextBlock x:Name="DifferentText" Text="—" FontTypography="BodyStrong" FontSize="18" />
+                    <ui:TextBlock x:Name="DifferentText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="MissingLabel" Text="Missing at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    <ui:TextBlock x:Name="MissingText" Text="—" FontTypography="BodyStrong" FontSize="18" />
+                    <ui:TextBlock x:Name="MissingText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="5,0,0,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="ExtraLabel" Text="Extra at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    <ui:TextBlock x:Name="ExtraText" Text="—" FontTypography="BodyStrong" FontSize="18" />
+                    <ui:TextBlock x:Name="ExtraText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
         </UniformGrid>
@@ -206,14 +206,26 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
             </Border>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
-                <ui:Button x:Name="CopyLogButton" Content="Copy activity log" Appearance="Primary"
-                           Icon="{ui:SymbolIcon Copy24}"
-                           Click="OnCopyLogClick" ToolTip="Copy the full activity log to the clipboard" />
-                <ui:Button x:Name="OpenLogButton" Content="Open log file" Margin="8,0,0,0" IsEnabled="False"
-                           Icon="{ui:SymbolIcon DocumentText24}"
-                           Click="OnOpenLogClick" ToolTip="Open this run's complete log file (includes the full difference list)" />
-            </StackPanel>
+            <Grid Grid.Row="2" Margin="0,6,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <ui:Button x:Name="CopyLogButton" Content="Copy activity log" Appearance="Primary"
+                               Icon="{ui:SymbolIcon Copy24}"
+                               Click="OnCopyLogClick" ToolTip="Copy the full activity log to the clipboard" />
+                    <ui:Button x:Name="OpenLogButton" Content="Open log file" Margin="8,0,0,0" IsEnabled="False"
+                               Icon="{ui:SymbolIcon DocumentText24}"
+                               Click="OnOpenLogClick" ToolTip="Open this run's complete log file (includes the full difference list)" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            ToolTip="How often the activity log above refreshes. Takes effect immediately, even mid-run. Also set in Settings.">
+                    <ui:TextBlock Text="Log refresh" VerticalAlignment="Center" Margin="0,0,8,0"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
+                    <Slider x:Name="VerifyLogThrottleSlider" Width="110" Minimum="0.5" Maximum="10"
+                            TickFrequency="0.5" IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                            ValueChanged="OnVerifyLogThrottleChanged" />
+                    <ui:TextBlock x:Name="VerifyLogThrottleValue" Text="3.0 s" Width="40" Margin="6,0,0,0"
+                                  VerticalAlignment="Center" FontSize="11" />
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- Results -->

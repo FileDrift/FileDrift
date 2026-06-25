@@ -7,7 +7,7 @@ internal static class CliRunner
 {
     internal static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
-        var root = new RootCommand("FileDrift — file comparison and verification tool");
+        var root = new RootCommand("FileDrift – file comparison and verification tool");
         root.Add(PreflightCommand.Build());
         root.Add(VerifyCommand.Build());
         root.Add(ReportCommand.Build());

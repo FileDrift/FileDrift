@@ -73,6 +73,29 @@ public partial class VerifyPage : Page
             win.SizeChanged += OnHostSizeChanged;
         }
         UpdateResultsMaxHeight();
+        SyncThrottleSlider(); // reflect the current log-throttle (it may have been changed in Settings)
+    }
+
+    private bool _syncingThrottle;
+
+    /// <summary>Sets the Verify-page log-throttle slider to the live value without re-persisting it.</summary>
+    private void SyncThrottleSlider()
+    {
+        _syncingThrottle = true;
+        VerifyLogThrottleSlider.Value = RuntimeOptions.LogThrottle.TotalSeconds;
+        VerifyLogThrottleValue.Text = $"{RuntimeOptions.LogThrottle.TotalSeconds:0.0} s";
+        _syncingThrottle = false;
+    }
+
+    private void OnVerifyLogThrottleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        var seconds = e.NewValue;
+        if (VerifyLogThrottleValue is not null) VerifyLogThrottleValue.Text = $"{seconds:0.0} s";
+        if (_syncingThrottle) return; // programmatic sync from RuntimeOptions — don't re-persist
+        RuntimeOptions.SetLogThrottle(seconds); // live: an in-flight run picks this up on its next tick
+        var s = SettingsStore.Load();
+        s.LogThrottleSeconds = seconds;
+        SettingsStore.Save(s);
     }
 
     private void OnHostSizeChanged(object? sender, SizeChangedEventArgs e) => UpdateResultsMaxHeight();
@@ -226,7 +249,7 @@ public partial class VerifyPage : Page
     {
         if (ModeText is null) return;
         string Mode(string? p) => string.IsNullOrWhiteSpace(p)
-            ? "—"
+            ? "–"
             : SmartFileEnumerator.PredictSource(p!) == EnumerationSource.Mft ? "MFT" : "SMB";
         ModeText.Text = $"Source → {Mode(SourceBox.Text)}   ·   Dest → {Mode(DestBox.Text)}";
     }
@@ -310,7 +333,7 @@ public partial class VerifyPage : Page
         catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
         catch (Exception ex)
         {
-            var m = $"Error: {ex.GetType().Name} — {ex.Message}";
+            var m = $"Error: {ex.GetType().Name} – {ex.Message}";
             StatusText.Text = m;
             AppendLog(m);
         }
@@ -359,46 +382,54 @@ public partial class VerifyPage : Page
 
             // Repurpose the four tiles to show what preflight gathered.
             SetSummaryLabels("Source files", "Source size", "Dest files", "Dest size");
-            MatchedText.Text   = result.SourceFileCount?.ToString("N0") ?? "—";
+            MatchedText.Text   = result.SourceFileCount?.ToString("N0") ?? "–";
             DifferentText.Text = Bytes(result.SourceTotalBytes);
-            MissingText.Text   = result.DestFileCount?.ToString("N0") ?? "—";
+            MissingText.Text   = result.DestFileCount?.ToString("N0") ?? "–";
             ExtraText.Text     = Bytes(result.DestTotalBytes);
 
             foreach (var issue in result.Issues)
                 AppendLog(issue);
 
             var summary = result.IsReady
-                ? $"Preflight OK — source {result.SourceFileCount:N0} files / {Bytes(result.SourceTotalBytes)}, " +
+                ? $"Preflight OK – source {result.SourceFileCount:N0} files / {Bytes(result.SourceTotalBytes)}, " +
                   $"dest {result.DestFileCount:N0} files / {Bytes(result.DestTotalBytes)}."
-                : $"Preflight blocked — {(result.Issues.Count == 0 ? "see issues" : string.Join("; ", result.Issues))}";
+                : $"Preflight blocked – {(result.Issues.Count == 0 ? "see issues" : string.Join("; ", result.Issues))}";
             StatusText.Text = summary;
             AppendLog(summary);
         }
         catch (OperationCanceledException) { StatusText.Text = "Cancelled."; AppendLog("Cancelled."); }
         catch (Exception ex)
         {
-            var m = $"Error: {ex.GetType().Name} — {ex.Message}";
+            var m = $"Error: {ex.GetType().Name} – {ex.Message}";
             StatusText.Text = m;
             AppendLog(m);
         }
         finally { EndRunLog(); SetRunning(false); _cts?.Dispose(); _cts = null; }
     }
 
-    private void OnCancelClick(object sender, RoutedEventArgs e)
+    private enum StopMode { None, Soft, Hard }
+    private StopMode _stopMode = StopMode.None; // set when a reconcile cancel is chosen; shown live in the status
+
+    private async void OnCancelClick(object sender, RoutedEventArgs e)
     {
         // Reconcile writes files, so offer a choice; verify/preflight are read-only and just stop.
         if (_reconcileRunning)
         {
-            var choice = MessageBox.Show(
-                "A file is currently being copied. How do you want to stop?\n\n" +
-                "Yes  —  Stop now: abort the current file and delete its partial copy.\n" +
-                "No  —  Finish the current file, then stop.\n" +
-                "Cancel  —  Keep going (don't stop).",
-                "Stop Reconcile", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
+            var content = Dialogs.ChoiceContent(
+                "A file is currently being copied. How do you want to stop?",
+                ("Stop now", "aborts the current file and deletes its partial copy."),
+                ("Finish current", "lets the current file finish, then stops."),
+                ("Continue", "keeps copying the files; nothing stops."));
 
-            if (choice == MessageBoxResult.Yes) { _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
-            else if (choice == MessageBoxResult.No) { _softStop?.Cancel(); StatusText.Text = "Finishing current file, then stopping…"; }
-            // Cancel / dismissed → keep going
+            var choice = await Dialogs.ChoiceAsync("Stop Reconcile", content,
+                primaryText: "Stop now", secondaryText: "Finish current", closeText: "Continue",
+                primaryDanger: true);
+
+            if (choice == Wpf.Ui.Controls.MessageBoxResult.Primary)
+            { _stopMode = StopMode.Hard; _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
+            else if (choice == Wpf.Ui.Controls.MessageBoxResult.Secondary)
+            { _stopMode = StopMode.Soft; _softStop?.Cancel(); StatusText.Text = "Finishing the current file, then stopping…"; }
+            // None (close/escape) → keep going
         }
         else
         {
@@ -456,6 +487,8 @@ public partial class VerifyPage : Page
     private string? _lastLogged;
     private VerifyPhase _lastProgressPhase = (VerifyPhase)(-1);
     private DateTime _lastLogAppendUtc = DateTime.MinValue;
+    private long _lastReconScreenProcessed; // for the throttled reconcile log rollup ("+N files since last line")
+    private long _lastReconScreenBytes;
     private RunLogger? _runLogger;
     private string? _lastLogPath;
 
@@ -559,7 +592,7 @@ public partial class VerifyPage : Page
     {
         if (await BuildPlanOrNullAsync() is not { } plan)
         {
-            StatusText.Text = "Nothing to reconcile — no missing or different files.";
+            StatusText.Text = "Nothing to reconcile – no missing or different files.";
             return;
         }
 
@@ -567,7 +600,7 @@ public partial class VerifyPage : Page
                       (plan.DirCreateCount > 0 ? $", create {plan.DirCreateCount:N0} folders" : "") +
                       (plan.ClobberCount > 0 ? $", {plan.ClobberCount:N0} newer at dest" : "") +
                       (plan.AclCount > 0 ? $", {plan.AclCount:N0} ACL change(s)" : "") +
-                      $" — {FormatSize(plan.TotalBytes)} total. No changes made.";
+                      $" – {FormatSize(plan.TotalBytes)} total. No changes made.";
 
         // Complete preview (every action + the ACEs/owner it applies) to a log file.
         StartRunLog("preview", _lastSrc, _lastDst);
@@ -585,7 +618,7 @@ public partial class VerifyPage : Page
         foreach (var a in plan.Actions.Take(screenCap))
             AppendScreen("[preview] " + DescribeAction(a));
         if (plan.TotalActions > screenCap)
-            AppendScreen($"… {plan.TotalActions - screenCap:N0} more — open the log file for the full preview.");
+            AppendScreen($"… {plan.TotalActions - screenCap:N0} more – open the log file for the full preview.");
 
         EndRunLog(); // closes the file, shows its path, enables "Open log file"
         StatusText.Text = summary;
@@ -595,7 +628,7 @@ public partial class VerifyPage : Page
     {
         if (await BuildPlanOrNullAsync() is not { } plan)
         {
-            StatusText.Text = "Nothing to reconcile — no missing or different files.";
+            StatusText.Text = "Nothing to reconcile – no missing or different files.";
             return;
         }
 
@@ -606,23 +639,24 @@ public partial class VerifyPage : Page
                   (plan.AclCount > 0 ? $"    • Add source permissions (ACLs) to {plan.AclCount:N0} item(s)\n" : "") +
                   $"\nTotal to write: {FormatSize(plan.TotalBytes)}.\n" +
                   $"Non-destructive: files that exist only on the destination are kept, and permissions are " +
-                  $"only added — never removed. (Differing files are overwritten with the source.)";
+                  $"only added – never removed. (Differing files are overwritten with the source.)";
         if (plan.ClobberCount > 0)
-            msg += $"\n\n⚠ WARNING: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
-                   $"NEWER than the source. Their newer content will be lost.";
+            msg += $"\n\nWarning: {plan.ClobberCount:N0} of the overwrites replace destination files that are " +
+                   $"newer than the source. Their newer content will be lost.";
         msg += "\n\nProceed?";
 
-        var choice = MessageBox.Show(msg, "Confirm Reconcile",
-            MessageBoxButton.YesNo,
-            plan.ClobberCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question,
-            MessageBoxResult.No);
-        if (choice != MessageBoxResult.Yes) return;
+        if (!await Dialogs.ConfirmAsync("Confirm Reconcile", msg, confirmText: "Proceed",
+                danger: plan.ClobberCount > 0))
+            return;
 
         _cts = new CancellationTokenSource();
         _softStop = new CancellationTokenSource();
+        _stopMode = StopMode.None;
         _reconcileRunning = true;
         SetRunning(true);
         ClearLog();
+        _lastReconScreenProcessed = 0;
+        _lastReconScreenBytes = 0;
         StartRunLog("reconcile", _lastSrc, _lastDst);
         AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +
                   $"({FormatSize(plan.TotalBytes)}) source → destination");
@@ -634,11 +668,29 @@ public partial class VerifyPage : Page
                 ProgressBar.IsIndeterminate = false;
                 ProgressBar.Value = Math.Min(100, p.BytesCopied * 100.0 / p.TotalBytes);
             }
-            StatusText.Text = $"Reconciling {p.Processed:N0}/{p.Total:N0} — {FormatSize(p.BytesCopied)} / {FormatSize(p.TotalBytes)}";
+            var status = $"Reconciling {p.Processed:N0}/{p.Total:N0} – {FormatSize(p.BytesCopied)} / {FormatSize(p.TotalBytes)}";
+            status += _stopMode switch
+            {
+                StopMode.Soft => "  ·  stopping after this file",
+                StopMode.Hard => "  ·  stopping now",
+                _ => "",
+            };
+            StatusText.Text = status;
             if (p.Message is { } m)
             {
-                LogToFile(m); // every action to the file log
-                if (DateTime.UtcNow - _lastLogAppendUtc >= RuntimeOptions.LogThrottle) AppendScreen(m); // throttled on screen
+                LogToFile(m); // every action to the file log (complete record)
+                if (p.Important)
+                    AppendScreen(m); // cleanup/important lines always shown verbatim
+                else if (DateTime.UtcNow - _lastLogAppendUtc >= RuntimeOptions.LogThrottle)
+                {
+                    // The screen log samples; show how many files/bytes were copied since the last line so
+                    // it reads as a summary, not as if files were skipped. Full per-file detail is in the log file.
+                    long dFiles = p.Processed - _lastReconScreenProcessed;
+                    long dBytes = p.BytesCopied - _lastReconScreenBytes;
+                    _lastReconScreenProcessed = p.Processed;
+                    _lastReconScreenBytes = p.BytesCopied;
+                    AppendScreen(dFiles > 1 ? $"+{dFiles:N0} files, {FormatSize(dBytes)}  ·  {m}" : m);
+                }
             }
         });
 
@@ -649,7 +701,7 @@ public partial class VerifyPage : Page
 
             ProgressBar.Value = result.Stopped ? ProgressBar.Value : 100;
             var verb = result.Stopped ? "Reconcile stopped" : "Reconcile done";
-            var summary = $"{verb} — copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
+            var summary = $"{verb} – copied {result.Copied:N0}, overwrote {result.Overwritten:N0}, " +
                           $"{FormatSize(result.BytesCopied)} written" +
                           (result.DirectoriesCreated > 0 ? $", {result.DirectoriesCreated:N0} folders created" : "") +
                           (result.AclsApplied > 0 ? $", {result.AclsApplied:N0} ACLs updated" : "") +
@@ -658,7 +710,7 @@ public partial class VerifyPage : Page
             StatusText.Text = summary;
             AppendLog(summary);
             foreach (var f in result.Failures)
-                AppendLog($"[FAILED] {f.RelativePath} — {f.Error}");
+                AppendLog($"[FAILED] {f.RelativePath} – {f.Error}");
 
             // Destination changed; require a fresh verify before reconciling again.
             _lastDiffs = null;
@@ -667,13 +719,14 @@ public partial class VerifyPage : Page
         }
         catch (Exception ex)
         {
-            var m = $"Reconcile error: {ex.GetType().Name} — {ex.Message}";
+            var m = $"Reconcile error: {ex.GetType().Name} – {ex.Message}";
             StatusText.Text = m;
             AppendLog(m);
         }
         finally
         {
             _reconcileRunning = false;
+            _stopMode = StopMode.None;
             EndRunLog(); SetRunning(false);
             _cts?.Dispose(); _cts = null;
             _softStop?.Dispose(); _softStop = null;
@@ -696,21 +749,21 @@ public partial class VerifyPage : Page
 
         var mode = _enumerator.Source == EnumerationSource.Mft ? "MFT" : "SMB";
         var summary =
-            $"Done ({mode}) — {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
+            $"Done ({mode}) – {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest entries.";
         if (result.ExcludedNewerCount > 0)
             summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
         if (run.Options is { IncludeAcl: true, AclScope: AclScope.FoldersOnly })
-            summary += "  (ACL scope: folders only — file permissions not checked.)";
+            summary += "  (ACL scope: folders only – file permissions not checked.)";
         if (run.TotalDifferences > rows.Count)
-            summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences — full list in the log file.)";
+            summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences – full list in the log file.)";
         StatusText.Text = summary;
         AppendLog(summary);
     }
 
     private void ResetSummary()
     {
-        MatchedText.Text = DifferentText.Text = MissingText.Text = ExtraText.Text = "—";
+        MatchedText.Text = DifferentText.Text = MissingText.Text = ExtraText.Text = "–";
         SetSummaryLabels("Matched", "Different", "Missing at dest", "Extra at dest");
         ProgressBar.Value = 0;
     }

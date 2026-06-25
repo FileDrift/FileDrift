@@ -106,7 +106,7 @@
             <ui:CardControl.Header>
                 <StackPanel>
                     <ui:TextBlock Text="Version" FontTypography="BodyStrong" />
-                    <ui:TextBlock x:Name="VersionText" Text="—"
+                    <ui:TextBlock x:Name="VersionText" Text="–"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 </StackPanel>
             </ui:CardControl.Header>
@@ -116,7 +116,7 @@
             <ui:CardControl.Header>
                 <StackPanel>
                     <ui:TextBlock Text="History database" FontTypography="BodyStrong" />
-                    <ui:TextBlock x:Name="DbPathText" Text="—"
+                    <ui:TextBlock x:Name="DbPathText" Text="–"
                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12"
                                   TextWrapping="Wrap" />
                 </StackPanel>

@@ -115,6 +115,7 @@ public sealed class ReconcileEngine
         long bytes = 0, lastReported = 0;
         long totalBytes = plan.TotalBytes;
         bool stopped = false;
+        string? lastCompleted = null; // last action that fully succeeded, for an accurate stop message
         var failures = new List<ReconcileFailure>();
 
         try
@@ -132,6 +133,13 @@ public sealed class ReconcileEngine
                 if (hardCancel.IsCancellationRequested || softStop.IsCancellationRequested)
                 {
                     stopped = true;
+                    // Name the real last file copied (the throttled screen log may have sampled past it).
+                    if (lastCompleted is not null)
+                        progress?.Report(new ReconcileProgress
+                        {
+                            Processed = n, Total = total, BytesCopied = bytes, TotalBytes = totalBytes,
+                            Message = $"Stopped – last file copied: {lastCompleted}", Important = true,
+                        });
                     break;
                 }
                 n++;
@@ -178,11 +186,20 @@ public sealed class ReconcileEngine
                         else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"owner: {err}" });
                     }
                     if (aclTouched) aclsApplied++;
+                    lastCompleted = a.RelativePath; // only on full success
                 }
                 catch (OperationCanceledException)
                 {
                     // Hard cancel mid-file: remove the partially-written destination file, then stop.
-                    if (a.CopyContent && TryDeletePartial(a.DestFullPath)) partialsRemoved++;
+                    if (a.CopyContent && TryDeletePartial(a.DestFullPath))
+                    {
+                        partialsRemoved++;
+                        progress?.Report(new ReconcileProgress
+                        {
+                            Processed = n, Total = total, BytesCopied = bytes, TotalBytes = totalBytes,
+                            Message = $"Cleanup – deleted partial copy: {a.RelativePath}", Important = true,
+                        });
+                    }
                     stopped = true;
                     break;
                 }

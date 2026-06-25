@@ -42,6 +42,16 @@ public partial class SettingsPage : Page
         DbPathText.Text = AppPaths.HistoryDatabase;
 
         _suppress = false;
+        Loaded += OnSettingsLoaded;
+    }
+
+    /// <summary>Re-sync the throttle slider on each show in case it was changed on the Verify page.</summary>
+    private void OnSettingsLoaded(object sender, RoutedEventArgs e)
+    {
+        _suppress = true;
+        LogThrottleSlider.Value = RuntimeOptions.LogThrottle.TotalSeconds;
+        LogThrottleValue.Text = $"{RuntimeOptions.LogThrottle.TotalSeconds:0.0} s";
+        _suppress = false;
     }
 
     private void PopulatePresetBox()
@@ -159,18 +169,17 @@ public partial class SettingsPage : Page
         catch { return false; }
     }
 
-    private void OnSavePreset(object sender, RoutedEventArgs e)
+    private async void OnSavePreset(object sender, RoutedEventArgs e)
     {
         var name = PresetNameBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            MessageBox.Show("Enter a name for the preset.", "Save preset", MessageBoxButton.OK, MessageBoxImage.Information);
+            await Dialogs.InfoAsync("Save preset", "Enter a name for the preset.");
             return;
         }
         if (ColorPresets.IsReserved(name))
         {
-            MessageBox.Show($"\"{name}\" is reserved. Choose a different name.", "Save preset",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            await Dialogs.InfoAsync("Save preset", $"\"{name}\" is reserved. Choose a different name.");
             return;
         }
 

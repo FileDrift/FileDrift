@@ -101,6 +101,14 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.6.0 (2026-06-25)
+- **Themed dialogs** — every confirmation now uses the app's own Fluent style (WPF-UI) instead of the OS message box, so they match the window's theme, accent, and corners. Covers the Reconcile confirmation, the three-way Stop prompt, and the Settings preset prompts. The Stop prompt's buttons read **Stop now** (red) / **Finish current** / **Continue file copy**.
+- **Activity-log rollup** — during a reconcile of many small files, the throttled on-screen log now shows how many files and bytes were copied since the previous line (e.g. `+312 files, 4.2 GB · Copy …`), so it reads as a periodic summary rather than appearing to skip files. The per-run log file still records every file.
+- **Log-refresh slider on the Verify page** — the activity-log refresh interval can now be adjusted right on the Verify page (next to the log), in addition to Settings; the two stay in sync and either persists.
+- **Persistent "stopping" status** — after choosing **Finish current** on a cancel, the status line now keeps showing "stopping after this file" while the current (possibly large) file finishes, instead of reverting to normal progress text.
+- **Cleanup is logged** — choosing **Stop now** now records which partially-written file was deleted (`Cleanup – deleted partial copy: …`) in the activity log. When a reconcile stops, it also logs the file that was actually copied last (`Stopped – last file copied: …`), independent of the activity-log sampling.
+- En dashes throughout the UI copy.
+
 ### 0.5.0 (2026-06-25)
 - **Byte-level Reconcile progress** — the progress bar and status now advance *within* a file as it copies (bytes copied / total bytes), not just once per completed file. A job of a few very large files no longer looks frozen for minutes at a time.
 - **Cancel refinement** — the Cancel button is now red (it appears only during a run). Cancelling a Reconcile mid-copy prompts for how to stop: **Stop now** (abort the current file and delete its partial copy), **Finish current** (let the file in progress complete, then stop before the next), or **Continue file copy**. Verify and Preflight are read-only and still stop immediately. The summary reports how many files copied and whether a partial was removed.

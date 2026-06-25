@@ -23,7 +23,7 @@ public sealed class RunLogger : IDisposable
         {
             var path = Path.Combine(AppPaths.LogsDirectory, $"{verb}-{DateTime.Now:yyyyMMdd-HHmmss}.log");
             var writer = new StreamWriter(path, append: false) { AutoFlush = true };
-            writer.WriteLine($"# FileDrift {verb} — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            writer.WriteLine($"# FileDrift {verb} – {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             writer.WriteLine($"# Source:      {source}");
             writer.WriteLine($"# Destination: {dest}");
             writer.WriteLine();
