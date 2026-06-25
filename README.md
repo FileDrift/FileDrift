@@ -4,7 +4,9 @@ File comparison and verification tool for Windows. Compares source and destinati
 
 ![FileDrift wordmark](FileDrift-wordmark.png)
 
-> **A note on authorship:** the code in this project is generated in its entirety by [Claude Code](https://claude.com/claude-code) (Anthropic's AI coding agent), directed and reviewed by the maintainer. This is stated up front in the interest of transparency — some people are rightly particular about AI-generated code, and you should weigh that for your own environment.
+> **A note on authorship:** the code in this project is generated in its entirety by [Claude Code](https://claude.com/claude-code) (Anthropic's AI coding agent), directed and reviewed by the maintainer. This is stated up front in the interest of transparency – some people are rightly particular about AI-generated code, and you should weigh that for your own environment.
+
+> **No support:** this tool is provided as-is, with no warranty and no support. It is shared for transparency and reference. Issues and pull requests may not be monitored or actioned, and there is no commitment to fixes, updates, or assistance of any kind.
 
 ---
 
