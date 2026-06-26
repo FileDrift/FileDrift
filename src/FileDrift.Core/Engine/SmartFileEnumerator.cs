@@ -17,6 +17,9 @@ public sealed class SmartFileEnumerator : IFileEnumerator
     private EnumerationSource _lastSource = EnumerationSource.Smb;
     public EnumerationSource Source => _lastSource;
 
+    public IReadOnlyCollection<string> InaccessiblePaths =>
+        _lastSource == EnumerationSource.Mft ? _mft.InaccessiblePaths : _smb.InaccessiblePaths;
+
     public async IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
         VerifyOptions options,

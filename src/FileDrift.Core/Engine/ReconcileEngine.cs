@@ -276,6 +276,10 @@ public sealed class ReconcileEngine
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
+        // An existing read-only destination would block FileMode.Create; clear it so the overwrite proceeds.
+        if (File.Exists(dest) && (File.GetAttributes(dest) & FileAttributes.ReadOnly) != 0)
+            File.SetAttributes(dest, File.GetAttributes(dest) & ~FileAttributes.ReadOnly);
+
         await using (var src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read,
                          BufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan))
         await using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
@@ -294,5 +298,16 @@ public sealed class ReconcileEngine
 
         // Preserve source timestamps so a follow-up verify reports the pair as matched.
         File.SetLastWriteTimeUtc(dest, File.GetLastWriteTimeUtc(source));
+
+        // Preserve creation time + user-settable attributes (best-effort; content is already copied).
+        // Set attributes LAST so a copied read-only flag doesn't block the time write above.
+        try
+        {
+            File.SetCreationTimeUtc(dest, File.GetCreationTimeUtc(source));
+            const FileAttributes copyable = FileAttributes.ReadOnly | FileAttributes.Hidden
+                | FileAttributes.System | FileAttributes.Archive;
+            File.SetAttributes(dest, File.GetAttributes(source) & copyable);
+        }
+        catch { /* metadata is best-effort — the file content and last-write time are already set */ }
     }
 }

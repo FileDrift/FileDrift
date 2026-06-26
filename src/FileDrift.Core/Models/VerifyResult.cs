@@ -8,7 +8,12 @@ public sealed class VerifyResult
     public required RunRecord Run { get; init; }
     public required IReadOnlyList<ComparisonResult> Comparisons { get; init; }
 
-    /// <summary>Number of destination-only files excluded by the as-of cutoff (newer than
-    /// <see cref="VerifyOptions.AsOfUtc"/> with no source counterpart). Zero when no cutoff is set.</summary>
+    /// <summary>Number of destination-only files excluded by the End cutoff (newer than End with no
+    /// source counterpart). Zero when no cutoff is set.</summary>
     public long ExcludedNewerCount { get; init; }
+
+    /// <summary>Source/destination paths that could not be read (access denied or I/O error) and were
+    /// skipped during enumeration. Non-empty means the comparison is incomplete — a "zero drift"
+    /// sign-off must account for these. Surfaced in the summary and written to the run log.</summary>
+    public IReadOnlyList<string> InaccessiblePaths { get; init; } = [];
 }

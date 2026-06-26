@@ -12,6 +12,9 @@ public sealed class SmbFileEnumerator : IFileEnumerator
 {
     public EnumerationSource Source => EnumerationSource.Smb;
 
+    private ConcurrentBag<string> _inaccessible = new();
+    public IReadOnlyCollection<string> InaccessiblePaths => _inaccessible;
+
     public async IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
         VerifyOptions options,
@@ -24,9 +27,10 @@ public sealed class SmbFileEnumerator : IFileEnumerator
             FullMode = BoundedChannelFullMode.Wait,
         });
 
+        var inaccessible = _inaccessible = new(); // fresh per enumeration
         var producerTask = Task.Run(async () =>
         {
-            try   { await ScanTreeAsync(rootPath, options, channel.Writer, progress, cancellationToken); }
+            try   { await ScanTreeAsync(rootPath, options, channel.Writer, progress, inaccessible, cancellationToken); }
             finally { channel.Writer.Complete(); }
         }, cancellationToken);
 
@@ -41,6 +45,7 @@ public sealed class SmbFileEnumerator : IFileEnumerator
         VerifyOptions options,
         ChannelWriter<FileRecord> writer,
         IProgress<EnumerationProgress>? progress,
+        ConcurrentBag<string> inaccessible,
         CancellationToken ct)
     {
         var sem         = new SemaphoreSlim(options.Threads, options.Threads);
@@ -62,6 +67,11 @@ public sealed class SmbFileEnumerator : IFileEnumerator
                     try
                     {
                         subdirs = Directory.GetDirectories(dir);
+
+                        // Don't recurse into reparse points (junctions, symlinks, mount points) — avoids
+                        // infinite loops and double-counting. MFT enumeration already skips them.
+                        if (subdirs.Length > 0)
+                            subdirs = Array.FindAll(subdirs, sub => !IsReparsePoint(sub));
 
                         // Folders are where explicit permissions usually live — emit them when comparing ACLs.
                         if (options.IncludeAcl)
@@ -106,12 +116,12 @@ public sealed class SmbFileEnumerator : IFileEnumerator
                                         CurrentDirectory = dir,
                                     });
                             }
-                            catch (UnauthorizedAccessException) { }
-                            catch (IOException) { }
+                            catch (UnauthorizedAccessException) { inaccessible.Add(file); }
+                            catch (IOException) { inaccessible.Add(file); }
                         }
                     }
-                    catch (UnauthorizedAccessException) { }
-                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { inaccessible.Add(dir); }
+                    catch (IOException) { inaccessible.Add(dir); }
                 }
                 catch (OperationCanceledException ex) { exceptions.Add(ex); subdirs = []; }
                 catch (Exception ex)                  { exceptions.Add(ex); subdirs = []; }
@@ -142,5 +152,11 @@ public sealed class SmbFileEnumerator : IFileEnumerator
         var fatal = exceptions.FirstOrDefault(e => e is not OperationCanceledException);
         if (fatal is not null) throw fatal;
         ct.ThrowIfCancellationRequested();
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch { return false; } // unreadable attributes — let the normal scan handle/skip it
     }
 }

@@ -61,9 +61,12 @@ public sealed class VerifyEngine
             if (destCredential is not null && NetworkPath.IsUnc(destPath))
                 connections.Add(new NetworkConnection(NetworkPath.GetShareRoot(destPath), destCredential));
 
-            // Phase 1 & 2 — enumerate both trees
+            // Phase 1 & 2 — enumerate both trees, capturing paths that couldn't be read on each side
+            // (so a "zero drift" result can't quietly omit files that were never readable).
             var source = await EnumerateAsync(sourcePath, options, VerifyPhase.EnumeratingSource, progress, cancellationToken);
+            var sourceInaccessible = _enumerator.InaccessiblePaths.ToArray();
             var dest   = await EnumerateAsync(destPath, options, VerifyPhase.EnumeratingDestination, progress, cancellationToken);
+            var inaccessible = sourceInaccessible.Concat(_enumerator.InaccessiblePaths).ToList();
 
             run.TotalSourceFiles = source.Count;
             run.TotalDestFiles   = dest.Count;
@@ -114,10 +117,17 @@ public sealed class VerifyEngine
                 Phase = VerifyPhase.Done,
                 Processed = run.MatchedCount + run.TotalDifferences,
                 Total = run.MatchedCount + run.TotalDifferences,
-                Message = $"Done — {run.MatchedCount} matched, {run.TotalDifferences} differences",
+                Message = $"Done – {run.MatchedCount} matched, {run.TotalDifferences} differences" +
+                          (inaccessible.Count > 0 ? $", {inaccessible.Count} inaccessible (skipped)" : ""),
             });
 
-            return new VerifyResult { Run = run, Comparisons = comparisons, ExcludedNewerCount = excludedNewer };
+            return new VerifyResult
+            {
+                Run = run,
+                Comparisons = comparisons,
+                ExcludedNewerCount = excludedNewer,
+                InaccessiblePaths = inaccessible,
+            };
         }
         catch (OperationCanceledException)
         {

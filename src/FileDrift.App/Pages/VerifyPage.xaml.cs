@@ -400,6 +400,7 @@ public partial class VerifyPage : Page
             });
             ShowResult(result, rows);
             LogDifferences(diffs); // complete list to the log file (grid is capped)
+            LogInaccessible(result.InaccessiblePaths); // skipped/unreadable paths, for sign-off integrity
             _lastDiffs = diffs;
             _lastRun = result.Run;
             _lastSrc = src; _lastDst = dst;
@@ -639,6 +640,16 @@ public partial class VerifyPage : Page
         _runLogger.WriteMany(lines);
     }
 
+    /// <summary>Writes the inaccessible/skipped paths to the run log so a sign-off can account for them.</summary>
+    private void LogInaccessible(IReadOnlyList<string> paths)
+    {
+        if (_runLogger is null || paths.Count == 0) return;
+        var lines = new List<string>(paths.Count + 2) { "", $"── Inaccessible / skipped ({paths.Count:N0}) ──" };
+        foreach (var p in paths.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+            lines.Add($"  {p}");
+        _runLogger.WriteMany(lines);
+    }
+
     private void StartRunLog(string verb, string src, string dst)
     {
         _runLogger = RunLogger.Start(verb, src, dst);
@@ -875,6 +886,8 @@ public partial class VerifyPage : Page
             summary += "  (ACL scope: folders only – file permissions not checked.)";
         if (run.TotalDifferences > rows.Count)
             summary += $"  (Grid shows first {rows.Count:N0} of {run.TotalDifferences:N0} differences – full list in the log file.)";
+        if (result.InaccessiblePaths.Count > 0)
+            summary += $"  ⚠ {result.InaccessiblePaths.Count:N0} path(s) could not be read and were skipped – the comparison is incomplete; see the log.";
         StatusText.Text = summary;
         AppendLog(summary);
     }

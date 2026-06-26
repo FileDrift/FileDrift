@@ -16,6 +16,10 @@ public sealed class MftFileEnumerator : IFileEnumerator
 {
     public EnumerationSource Source => EnumerationSource.Mft;
 
+    // MFT access-denial is all-or-nothing (the volume handle fails → SmartFileEnumerator falls back to
+    // SMB, which tracks inaccessible paths); per-file stat misses here are deletion races, not denials.
+    public IReadOnlyCollection<string> InaccessiblePaths => Array.Empty<string>();
+
     public async IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
         VerifyOptions options,

@@ -103,6 +103,13 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.8.0 (2026-06-26) — correctness hardening
+
+- **Inaccessible paths are no longer silent.** Files and folders that can't be read during a verify (access denied or I/O error) are now counted, flagged in the summary ("*N path(s) could not be read and were skipped – the comparison is incomplete*"), and listed in the run log. Previously they were skipped silently, so a "zero drift" result could quietly omit files nobody could read.
+- **Reparse points are skipped on SMB scans.** The SMB enumerator no longer follows directory junctions, symlinks, or mount points (matching the MFT scanner), avoiding infinite loops and double-counting on file servers that use them.
+- **Reconcile preserves more metadata.** Copies now also set the source's creation time and user-settable attributes (read-only, hidden, system, archive). A read-only destination is cleared first so an overwrite doesn't fail.
+- **Long-path (>260) handling confirmed.** Verified that enumeration and reconcile already handle paths longer than 260 characters on .NET 9 — no change required.
+
 ### 0.7.0 (2026-06-25)
 - **Live transfer rate** — during a reconcile copy, a write-throughput readout appears next to the status line (e.g. `112 MB/s`). It samples every second and shows a rolling average (~10s window) so it's not bursty, reads "–" when nothing is moving (between files, ACL-only phase), and is labelled as FileDrift's write throughput (which can briefly run ahead of the wire over buffered SMB). No ETA — by design.
 - **Preview summary banner** — running Preview now shows an inline, dismissible banner with the plan headline (`Copy 5 · Overwrite 0 · 425 ACL · 92.8 GB to write`), amber when any overwrite would replace a newer destination file. It auto-hides when a run starts; full per-file detail still goes to the preview log file.
