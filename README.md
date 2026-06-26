@@ -103,6 +103,11 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.8.1 (2026-06-26)
+
+- **Read-permission failures are now prominent.** When a verify can't read one or more paths, a banner appears with the count. If the **source or destination root itself** was unreadable — so the results aren't a valid comparison at all — the banner is red and says so explicitly, rather than the result reading like a clean "0 differences". Previously this was only an appended note on the status line.
+- **Inaccessible count is persisted to history.** Each run now records how many paths were skipped as unreadable, shown in a new "Inaccessible" column on the History page. The history database migrates automatically; existing runs show 0.
+
 ### 0.8.0 (2026-06-26) — correctness hardening
 
 - **Inaccessible paths are no longer silent.** Files and folders that can't be read during a verify (access denied or I/O error) are now counted, flagged in the summary ("*N path(s) could not be read and were skipped – the comparison is incomplete*"), and listed in the run log. Previously they were skipped silently, so a "zero drift" result could quietly omit files nobody could read.

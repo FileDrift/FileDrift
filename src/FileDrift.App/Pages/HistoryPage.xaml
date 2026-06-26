@@ -24,6 +24,7 @@
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
                 <DataGridTextColumn Header="Matched" Binding="{Binding Matched}" Width="90" />
                 <DataGridTextColumn Header="Differences" Binding="{Binding Differences}" Width="100" />
+                <DataGridTextColumn Header="Inaccessible" Binding="{Binding Inaccessible}" Width="100" />
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

@@ -105,6 +105,7 @@ public sealed class VerifyEngine
             }
 
             Tally(run, comparisons);
+            run.InaccessibleCount = inaccessible.Count;
 
             // Phase 5 — persist completed run
             run.Status = RunStatus.Completed;

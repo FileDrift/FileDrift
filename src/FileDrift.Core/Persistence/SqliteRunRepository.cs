@@ -8,7 +8,7 @@ namespace FileDrift.Core.Persistence;
 /// <summary>SQLite-backed run history. Creates and migrates its schema on construction.</summary>
 public sealed class SqliteRunRepository : IRunRepository
 {
-    private const int TargetSchemaVersion = 1;
+    private const int TargetSchemaVersion = 2;
 
     private readonly string _connectionString;
 
@@ -55,6 +55,8 @@ public sealed class SqliteRunRepository : IRunRepository
         int current = ReadSchemaVersion(conn, tx);
         if (current < 1)
             ApplyMigration1(conn, tx);
+        if (current < 2)
+            ApplyMigration2(conn, tx);
 
         if (current < TargetSchemaVersion)
         {
@@ -104,6 +106,9 @@ public sealed class SqliteRunRepository : IRunRepository
         Execute(conn, tx, "CREATE INDEX IF NOT EXISTS idx_runs_status  ON runs(status);");
     }
 
+    private static void ApplyMigration2(SqliteConnection conn, SqliteTransaction tx) =>
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN inaccessible_count INTEGER NOT NULL DEFAULT 0;");
+
     private static void Execute(SqliteConnection conn, SqliteTransaction tx, string sql)
     {
         using var cmd = conn.CreateCommand();
@@ -123,12 +128,12 @@ public sealed class SqliteRunRepository : IRunRepository
                 id, started_at_utc, source_path, dest_path, options_json,
                 completed_at_utc, status, total_source_files, total_dest_files,
                 matched_count, different_count, missing_at_dest_count, extra_at_dest_count,
-                sign_off_note, signed_off_at_utc)
+                sign_off_note, signed_off_at_utc, inaccessible_count)
             VALUES (
                 $id, $started, $src, $dst, $options,
                 $completed, $status, $totalSrc, $totalDst,
                 $matched, $different, $missing, $extra,
-                $note, $signedOff)
+                $note, $signedOff, $inaccessible)
             ON CONFLICT(id) DO UPDATE SET
                 started_at_utc        = excluded.started_at_utc,
                 source_path           = excluded.source_path,
@@ -143,7 +148,8 @@ public sealed class SqliteRunRepository : IRunRepository
                 missing_at_dest_count = excluded.missing_at_dest_count,
                 extra_at_dest_count   = excluded.extra_at_dest_count,
                 sign_off_note         = excluded.sign_off_note,
-                signed_off_at_utc     = excluded.signed_off_at_utc;
+                signed_off_at_utc     = excluded.signed_off_at_utc,
+                inaccessible_count    = excluded.inaccessible_count;
             """;
 
         AddParam(cmd, "$id",        run.Id.ToString());
@@ -161,6 +167,7 @@ public sealed class SqliteRunRepository : IRunRepository
         AddParam(cmd, "$extra",     run.ExtraAtDestCount);
         AddParam(cmd, "$note",      run.SignOffNote);
         AddParam(cmd, "$signedOff", ToIsoOrNull(run.SignedOffAtUtc));
+        AddParam(cmd, "$inaccessible", run.InaccessibleCount);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -245,7 +252,7 @@ public sealed class SqliteRunRepository : IRunRepository
         "id, started_at_utc, source_path, dest_path, options_json, " +
         "completed_at_utc, status, total_source_files, total_dest_files, " +
         "matched_count, different_count, missing_at_dest_count, extra_at_dest_count, " +
-        "sign_off_note, signed_off_at_utc";
+        "sign_off_note, signed_off_at_utc, inaccessible_count";
 
     private static RunRecord Map(SqliteDataReader r)
     {
@@ -266,6 +273,7 @@ public sealed class SqliteRunRepository : IRunRepository
             ExtraAtDestCount   = r.GetInt64(12),
             SignOffNote        = r.IsDBNull(13) ? null : r.GetString(13),
             SignedOffAtUtc     = r.IsDBNull(14) ? null : FromIso(r.GetString(14)),
+            InaccessibleCount  = r.GetInt64(15),
         };
     }
 

@@ -31,7 +31,8 @@ public partial class HistoryPage : Page
     }
 
     private sealed record HistoryRow(
-        string Started, string Source, string Dest, string Status, string Matched, string Differences)
+        string Started, string Source, string Dest, string Status, string Matched, string Differences,
+        string Inaccessible)
     {
         public static HistoryRow From(RunRecord r) => new(
             r.StartedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
@@ -39,6 +40,7 @@ public partial class HistoryPage : Page
             r.DestPath,
             r.Status.ToString(),
             r.MatchedCount.ToString("N0"),
-            r.TotalDifferences.ToString("N0"));
+            r.TotalDifferences.ToString("N0"),
+            r.InaccessibleCount.ToString("N0"));
     }
 }

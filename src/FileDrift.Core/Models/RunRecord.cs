@@ -18,6 +18,10 @@ public sealed class RunRecord
     public long MissingAtDestCount { get; set; }
     public long ExtraAtDestCount { get; set; }
 
+    /// <summary>Paths that could not be read (access denied / I/O error) and were skipped during
+    /// enumeration. Non-zero means the comparison was incomplete.</summary>
+    public long InaccessibleCount { get; set; }
+
     /// <summary>Optional free-text sign-off note written after reviewing results.</summary>
     public string? SignOffNote { get; set; }
 

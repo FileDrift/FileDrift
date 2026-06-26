@@ -161,6 +161,8 @@
             </Grid>
             <ui:InfoBar x:Name="PreviewBar" Margin="0,8,0,0" IsOpen="False" IsClosable="True"
                         Severity="Informational" Title="Preview" />
+            <ui:InfoBar x:Name="ResultBar" Margin="0,8,0,0" IsOpen="False" IsClosable="True"
+                        Severity="Warning" Title="Incomplete comparison" />
         </StackPanel>
 
         <!-- Summary -->

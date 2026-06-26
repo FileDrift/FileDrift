@@ -890,7 +890,37 @@ public partial class VerifyPage : Page
             summary += $"  ⚠ {result.InaccessiblePaths.Count:N0} path(s) could not be read and were skipped – the comparison is incomplete; see the log.";
         StatusText.Text = summary;
         AppendLog(summary);
+        ShowInaccessibleWarning(result);
     }
+
+    /// <summary>Surfaces a prominent banner when paths couldn't be read — louder than the status line.
+    /// If a root (source/dest) itself was unreadable, the results aren't a valid comparison, so it's an error.</summary>
+    private void ShowInaccessibleWarning(VerifyResult result)
+    {
+        if (result.InaccessiblePaths.Count == 0) { ResultBar.IsOpen = false; return; }
+
+        bool sourceRoot = result.InaccessiblePaths.Any(p => PathEquals(p, result.Run.SourcePath));
+        bool destRoot   = result.InaccessiblePaths.Any(p => PathEquals(p, result.Run.DestPath));
+        if (sourceRoot || destRoot)
+        {
+            var which = sourceRoot && destRoot ? "source and destination" : sourceRoot ? "source" : "destination";
+            ResultBar.Severity = Wpf.Ui.Controls.InfoBarSeverity.Error;
+            ResultBar.Title = $"Results do not reflect the {which}";
+            ResultBar.Message = $"The {which} could not be read (access denied or I/O error), so these results are " +
+                                $"not a valid comparison. {result.InaccessiblePaths.Count:N0} path(s) were skipped – see the log.";
+        }
+        else
+        {
+            ResultBar.Severity = Wpf.Ui.Controls.InfoBarSeverity.Warning;
+            ResultBar.Title = "Incomplete comparison";
+            ResultBar.Message = $"{result.InaccessiblePaths.Count:N0} path(s) could not be read and were skipped, so " +
+                                "some files were not compared. See the log for the full list.";
+        }
+        ResultBar.IsOpen = true;
+    }
+
+    private static bool PathEquals(string a, string b) =>
+        string.Equals(a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     private void ResetSummary()
     {
@@ -925,6 +955,7 @@ public partial class VerifyPage : Page
         {
             PreviewButton.IsEnabled = ReconcileButton.IsEnabled = false;
             PreviewBar.IsOpen = false; // a stale preview no longer reflects what's about to happen
+            ResultBar.IsOpen = false;  // clear last run's inaccessible warning
         }
         else
         {
