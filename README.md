@@ -103,6 +103,10 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.8.2 (2026-06-26)
+
+- **Dark-mode contrast.** The verify summary tiles, the activity-log pane, and the Credentials cards now use the app's standard card surface and border brushes (`CardBackgroundFillColorDefaultBrush` / `CardStrokeColorDefaultBrush`) instead of a near-transparent fill that disappeared against the dark Mica backdrop. They read as defined panels in dark mode now; light mode is unchanged.
+
 ### 0.8.1 (2026-06-26)
 
 - **Read-permission failures are now prominent.** When a verify can't read one or more paths, a banner appears with the count. If the **source or destination root itself** was unreadable — so the results aren't a valid comparison at all — the banner is red and says so explicitly, rather than the result reading like a clean "0 differences". Previously this was only an appended note on the status line.

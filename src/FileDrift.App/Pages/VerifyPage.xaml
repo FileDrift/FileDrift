@@ -167,25 +167,25 @@
 
         <!-- Summary -->
         <UniformGrid Grid.Row="5" Columns="4" Margin="0,0,0,12">
-            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="0,0,5,0" Padding="12,8">
+            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Margin="0,0,5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="MatchedLabel" Text="Matched" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="MatchedText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
+            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="DifferentLabel" Text="Different" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="DifferentText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
+            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Margin="2.5,0,2.5,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="MissingLabel" Text="Missing at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="MissingText" Text="–" FontTypography="BodyStrong" FontSize="18" />
                 </StackPanel>
             </Border>
-            <Border Background="{DynamicResource ControlFillColorDefaultBrush}" CornerRadius="6" Margin="5,0,0,0" Padding="12,8">
+            <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Margin="5,0,0,0" Padding="12,8">
                 <StackPanel>
                     <ui:TextBlock x:Name="ExtraLabel" Text="Extra at dest" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                     <ui:TextBlock x:Name="ExtraText" Text="–" FontTypography="BodyStrong" FontSize="18" />
@@ -201,10 +201,10 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <ui:TextBlock Grid.Row="0" Text="Activity" FontTypography="BodyStrong" FontSize="12" Margin="0,0,0,3" />
-            <Border Grid.Row="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}" BorderThickness="1" CornerRadius="6">
+            <Border Grid.Row="1" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6">
                 <ListBox x:Name="ActivityLog" Height="80" BorderThickness="0"
                          FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11"
-                         Background="{DynamicResource ControlFillColorDefaultBrush}"
+                         Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                          VirtualizingStackPanel.IsVirtualizing="True">
                     <ListBox.ItemContainerStyle>
