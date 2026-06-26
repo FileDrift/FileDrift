@@ -12,6 +12,8 @@ internal static class CliServices
 
     public static VerifyEngine Verify() => new(new SmartFileEnumerator(), Repository());
 
+    public static ReconcileEngine Reconcile() => new();
+
     public static PreflightEngine Preflight() => new(new SmartFileEnumerator());
 
     public static ICredentialStore Credentials() => new WindowsCredentialStore();

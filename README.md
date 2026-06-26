@@ -45,9 +45,12 @@ FileDrift.sln
 ```
 FileDrift preflight --src \\server\share --dst \\server2\share2
 FileDrift verify    --src \\server\share --dst \\server2\share2 [--depth full] [--acl] [--threads 8]
+FileDrift reconcile --src \\server\share --dst \\server2\share2 [--acl] [--yes]
 FileDrift report    --id <run-id>
 FileDrift history   [--last 10] [--src \\server\share]
 ```
+
+`reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
 
 All CLI output is JSON. Pipe to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
 
@@ -102,6 +105,11 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 0.9.0 (2026-06-26)
+
+- **Automated test suite.** Added `FileDrift.Core.Tests` (xUnit, 27 tests) covering ACL→readable translation, glob matching, comparison classification + timestamp tolerance, the full reconcile path (live byte progress, hard/soft cancel, partial cleanup, last-file reporting, metadata/attribute preservation, read-only overwrite), reparse-point skipping, inaccessible-path tracking, and the history-database round-trip + v1→v2 schema migration. The correctness fixes from 0.8.x are now permanent regression tests.
+- **`reconcile` is now available from the CLI.** `FileDrift reconcile --src … --dst …` previews the plan and writes nothing; add `--yes` to apply. Supports the same options as `verify` (depth, `--acl`, credentials, date range, exclude, strict) and emits JSON with the plan and result. This makes reconcile schedulable for headless/automated use.
 
 ### 0.8.2 (2026-06-26)
 

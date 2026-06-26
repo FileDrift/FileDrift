@@ -112,7 +112,7 @@ internal static class VerifyCommand
         return cmd;
     }
 
-    private static VerifyDepth ParseDepth(string? value) => value?.ToLowerInvariant() switch
+    internal static VerifyDepth ParseDepth(string? value) => value?.ToLowerInvariant() switch
     {
         "quick" => VerifyDepth.Quick,
         "full" => VerifyDepth.Full,
@@ -120,7 +120,7 @@ internal static class VerifyCommand
         _ => throw new ArgumentException($"Unknown depth '{value}'. Use quick, standard, or full."),
     };
 
-    private static DateTime? ParseDate(string? value, bool startOfDay)
+    internal static DateTime? ParseDate(string? value, bool startOfDay)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!DateTime.TryParse(value, System.Globalization.CultureInfo.CurrentCulture,
@@ -129,7 +129,7 @@ internal static class VerifyCommand
         return startOfDay ? VerifyOptions.StartOfLocalDayUtc(date) : VerifyOptions.EndOfLocalDayUtc(date);
     }
 
-    private static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch
+    internal static FileDriftHashAlgorithm ParseHash(string? value) => value?.ToLowerInvariant() switch
     {
         "sha1" => FileDriftHashAlgorithm.SHA1,
         "sha256" => FileDriftHashAlgorithm.SHA256,
