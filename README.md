@@ -52,6 +52,25 @@ FileDrift history   [--last 10] [--src \\server\share]
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
 
+### Credentials
+
+The CLI never takes a password as an argument. It uses credentials stored in **Windows Credential Manager** under the `FileDrift:` naming convention, referenced by target name with `--cred-source` / `--cred-dest`.
+
+Save one the first time either in the app's **Credentials** page, or headlessly with Windows' built-in `cmdkey` — omit `/pass` so the password is prompted for, never placed on the command line:
+
+```
+cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"
+```
+
+Then reference it by target name:
+
+```
+FileDrift verify    --src \\server\share --dst D:\target --cred-source "FileDrift:\\server\share"
+FileDrift reconcile --src \\server\share --dst D:\target --cred-dest   "FileDrift:\\server\share" --yes
+```
+
+Use the target `FileDrift:(default)` for a fallback credential applied to any share without its own entry. Saved targets are visible and editable under Control Panel → Credential Manager.
+
 All CLI output is JSON. Pipe to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
 
 ## Enumeration strategy
