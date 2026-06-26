@@ -3,7 +3,7 @@ using FileDrift.Core.Engine;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Persistence;
 
-namespace FileDrift.App.Cli;
+namespace FileDrift.Cli;
 
 /// <summary>Constructs Core services for CLI command handlers.</summary>
 internal static class CliServices

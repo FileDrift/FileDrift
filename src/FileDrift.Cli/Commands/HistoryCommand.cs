@@ -1,7 +1,7 @@
 using System.CommandLine;
 using FileDrift.Core.Models;
 
-namespace FileDrift.App.Cli.Commands;
+namespace FileDrift.Cli.Commands;
 
 internal static class HistoryCommand
 {

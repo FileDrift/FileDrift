@@ -26,8 +26,10 @@ File comparison and verification tool for Windows. Compares source and destinati
 
 ```
 FileDrift.sln
-├── src/FileDrift.Core/     — engine: enumeration, comparison, hashing, ACL checks, run history
-└── src/FileDrift.App/      — WPF UI + CLI entry point (single exe)
+├── src/FileDrift.Core/      — engine: enumeration, comparison, hashing, ACL checks, run history
+├── src/FileDrift.App/       — WPF GUI (FileDrift.exe)
+├── src/FileDrift.Cli/       — console CLI (FileDrift-CLI.exe)
+└── tests/FileDrift.Core.Tests/ — xUnit tests for the engine
 ```
 
 **FileDrift.Core** is a pure C# class library with no UI dependency. Both the GUI and CLI call it directly. Key interfaces:
@@ -38,16 +40,16 @@ FileDrift.sln
 | `IRunRepository` | Persist and query run history (SQLite implementation) |
 | `ICredentialStore` | Store and retrieve credentials (Windows Credential Manager implementation) |
 
-**FileDrift.App** is a single `FileDrift.exe`. When launched with arguments it runs headless via `AttachConsole`; when launched without arguments it opens the WPF window.
+**FileDrift.App** is the WPF GUI (`FileDrift.exe`). **FileDrift.Cli** is a separate console executable (`FileDrift-CLI.exe`) for headless and scriptable use — a real console-subsystem program, so the shell waits for it, output is synchronous, and exit codes are reliable in scripts and scheduled tasks.
 
 ## CLI usage
 
 ```
-FileDrift preflight --src \\server\share --dst \\server2\share2
-FileDrift verify    --src \\server\share --dst \\server2\share2 [--depth full] [--acl] [--threads 8]
-FileDrift reconcile --src \\server\share --dst \\server2\share2 [--acl] [--yes]
-FileDrift report    --id <run-id>
-FileDrift history   [--last 10] [--src \\server\share]
+FileDrift-CLI preflight --src \\server\share --dst \\server2\share2
+FileDrift-CLI verify    --src \\server\share --dst \\server2\share2 [--depth full] [--acl] [--threads 8]
+FileDrift-CLI reconcile --src \\server\share --dst \\server2\share2 [--acl] [--yes]
+FileDrift-CLI report    --id <run-id>
+FileDrift-CLI history   [--last 10] [--src \\server\share]
 ```
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
@@ -65,8 +67,8 @@ cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"
 Then reference it by target name:
 
 ```
-FileDrift verify    --src \\server\share --dst D:\target --cred-source "FileDrift:\\server\share"
-FileDrift reconcile --src \\server\share --dst D:\target --cred-dest   "FileDrift:\\server\share" --yes
+FileDrift-CLI verify    --src \\server\share --dst D:\target --cred-source "FileDrift:\\server\share"
+FileDrift-CLI reconcile --src \\server\share --dst D:\target --cred-dest   "FileDrift:\\server\share" --yes
 ```
 
 Use the target `FileDrift:(default)` for a fallback credential applied to any share without its own entry. Saved targets are visible and editable under Control Panel → Credential Manager.
@@ -125,10 +127,14 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.9.1 (2026-06-26)
+
+- **The CLI is now a dedicated console executable, `FileDrift-CLI.exe`.** Previously the GUI `FileDrift.exe` doubled as the CLI by attaching to the parent console — which made `cmd.exe` return the prompt *before* the output printed (it looked like it hung waiting for a keypress) and made batch sequencing and exit codes unreliable. The CLI is now a proper console-subsystem program: the shell waits for it, output is synchronous, and exit codes are reliable for scripts and scheduled tasks. **Breaking:** CLI commands now use `FileDrift-CLI` (for example `FileDrift-CLI verify …`); the GUI `FileDrift.exe` no longer accepts command-line arguments.
+
 ### 0.9.0 (2026-06-26)
 
 - **Automated test suite.** Added `FileDrift.Core.Tests` (xUnit, 27 tests) covering ACL→readable translation, glob matching, comparison classification + timestamp tolerance, the full reconcile path (live byte progress, hard/soft cancel, partial cleanup, last-file reporting, metadata/attribute preservation, read-only overwrite), reparse-point skipping, inaccessible-path tracking, and the history-database round-trip + v1→v2 schema migration. The correctness fixes from 0.8.x are now permanent regression tests.
-- **`reconcile` is now available from the CLI.** `FileDrift reconcile --src … --dst …` previews the plan and writes nothing; add `--yes` to apply. Supports the same options as `verify` (depth, `--acl`, credentials, date range, exclude, strict) and emits JSON with the plan and result. This makes reconcile schedulable for headless/automated use.
+- **`reconcile` is now available from the CLI.** `FileDrift-CLI reconcile --src … --dst …` previews the plan and writes nothing; add `--yes` to apply. Supports the same options as `verify` (depth, `--acl`, credentials, date range, exclude, strict) and emits JSON with the plan and result. This makes reconcile schedulable for headless/automated use.
 
 ### 0.8.2 (2026-06-26)
 

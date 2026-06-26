@@ -1,7 +1,7 @@
 using System.CommandLine;
-using FileDrift.App.Cli.Commands;
+using FileDrift.Cli.Commands;
 
-namespace FileDrift.App.Cli;
+namespace FileDrift.Cli;
 
 internal static class CliRunner
 {

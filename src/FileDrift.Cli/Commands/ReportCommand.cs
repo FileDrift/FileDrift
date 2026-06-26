@@ -1,6 +1,6 @@
 using System.CommandLine;
 
-namespace FileDrift.App.Cli.Commands;
+namespace FileDrift.Cli.Commands;
 
 internal static class ReportCommand
 {
