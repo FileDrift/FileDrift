@@ -129,6 +129,10 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 0.9.4 (2026-06-29)
+
+- **Estimated time remaining on reconcile.** Next to the transfer rate, the readout now shows an approximate `~ N min left` while copying. It is derived from the *same* ~10-second smoothed rate (not an instantaneous spike), only appears once that rate has settled and bytes remain, blanks out when nothing is moving or once you've chosen to stop, and rounds up so it never under-promises. It is deliberately marked approximate (the `~` and the tooltip) and will drift if the transfer rate does.
+
 ### 0.9.3 (2026-06-29)
 
 - **Human-readable CLI output.** CLI commands now print an aligned table in an interactive console (handy for quick lookups like `FileDrift-CLI credential list` or `FileDrift-CLI history`) and JSON when the output is piped or redirected, so scripts are unaffected. Force either with `--table` or `--json`.

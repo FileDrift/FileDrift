@@ -105,8 +105,10 @@ public partial class VerifyPage : Page
     // ── live transfer rate (reconcile only) ──
 
     private const int RateWindowSeconds = 10; // rolling-average window; longer = smoother, less bursty
+    private const int EtaMinSamples = 5;      // don't show an ETA until the smoothed rate has settled
 
     private long _liveBytes;            // cumulative bytes written, set from the copy thread (Interlocked)
+    private long _reconTotalBytes;      // plan.TotalBytes for the current reconcile, for the ETA
     private long _rateLastBytes;
     private DateTime _rateLastTick;
     private DateTime _lastRefreshUtc;   // single clock for the synced rate + activity-log refresh
@@ -137,6 +139,18 @@ public partial class VerifyPage : Page
         RateText.Text = "";
     }
 
+    /// <summary>Approximate, human-friendly duration for the ETA. Rounds up (conservative — don't under-promise).</summary>
+    private static string FormatDuration(double seconds)
+    {
+        if (seconds < 1) return "moments";
+        if (seconds < 60) return $"{Math.Ceiling(seconds):0} sec";
+        if (seconds < 3600) return $"{Math.Ceiling(seconds / 60):0} min";
+        int h = (int)(seconds / 3600);
+        int m = (int)Math.Ceiling(seconds % 3600 / 60.0);
+        if (m == 60) { h++; m = 0; }
+        return m > 0 ? $"{h} h {m} min" : $"{h} h";
+    }
+
     /// <summary>Drives both live readouts off one clock: samples throughput every second, then at the
     /// live-refresh cadence redraws the rate AND appends the activity-log rollup together (in phase).
     /// Rate shows "–" when nothing is moving (between files / ACL-only phase) so it doesn't read 0 B/s.</summary>
@@ -161,7 +175,19 @@ public partial class VerifyPage : Page
         _lastRefreshUtc = t;
 
         double avg = _rateSamples.Count > 0 ? _rateSamples.Average() : 0;
-        RateText.Text = avg >= 1 ? $"{FormatSize((long)avg)}/s" : "–";
+        if (avg >= 1)
+        {
+            var readout = $"{FormatSize((long)avg)}/s";
+            long remaining = _reconTotalBytes - now;
+            // ETA from the SAME smoothed rate; only once it's settled, bytes remain, and we're not stopping.
+            if (_reconTotalBytes > 0 && remaining > 0 && _rateSamples.Count >= EtaMinSamples && _stopMode == StopMode.None)
+                readout += $"  ·  ~{FormatDuration(remaining / avg)} left";
+            RateText.Text = readout;
+        }
+        else
+        {
+            RateText.Text = "–"; // nothing moving (between files / ACL phase): no rate, no ETA
+        }
 
         if (_reconLatestProgress is { Message: { } m } p)
         {
@@ -788,6 +814,7 @@ public partial class VerifyPage : Page
         ClearLog();
         _lastReconScreenProcessed = 0;
         _lastReconScreenBytes = 0;
+        _reconTotalBytes = plan.TotalBytes;
         StartRateMeter();
         StartRunLog("reconcile", _lastSrc, _lastDst);
         AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +

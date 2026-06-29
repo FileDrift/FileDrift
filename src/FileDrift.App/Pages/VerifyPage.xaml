@@ -157,7 +157,7 @@
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                 <ui:TextBlock x:Name="RateText" Text="" HorizontalAlignment="Right"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12"
-                              ToolTip="Write throughput to the destination, averaged over the last few seconds. This measures bytes written by FileDrift; over buffered SMB it can briefly run ahead of the wire." />
+                              ToolTip="Write throughput to the destination, averaged over the last several seconds (measures bytes written by FileDrift; over buffered SMB it can briefly run ahead of the wire). The '~ … left' estimate is approximate — it is that recent average rate applied to the bytes remaining, and will drift if the rate changes." />
             </Grid>
             <ui:InfoBar x:Name="PreviewBar" Margin="0,8,0,0" IsOpen="False" IsClosable="True"
                         Severity="Informational" Title="Preview" />
