@@ -84,7 +84,12 @@ internal static class CliOutput
         var props = items[0].GetType().GetProperties();
         var headers = props.Select(p => Title(p.Name)).ToArray();
         var rows = items.Select(it => props.Select(p => Cell(p.GetValue(it))).ToArray()).ToList();
-        var widths = headers.Select((h, i) => Math.Max(h.Length, rows.Max(r => r[i].Length))).ToArray();
+        // Cap each column so a long value (e.g. a UNC path) can't blow the table out to an unreadable
+        // width. Over-long cells are middle-ellipsised, which keeps both the server head and the leaf
+        // (the distinguishing part) visible. GUIDs (36) and timestamps (20) fit under the cap untouched.
+        var widths = headers
+            .Select((h, i) => Math.Min(MaxColumnWidth, Math.Max(h.Length, rows.Max(r => r[i].Length))))
+            .ToArray();
 
         Console.WriteLine(pad + Join(headers, widths));
         Console.WriteLine(pad + string.Join("  ", widths.Select(w => new string('-', w))));
@@ -92,8 +97,21 @@ internal static class CliOutput
             Console.WriteLine(pad + Join(r, widths));
     }
 
+    private const int MaxColumnWidth = 44;
+
     private static string Join(string[] cells, int[] widths) =>
-        string.Join("  ", cells.Select((c, i) => c.PadRight(widths[i]))).TrimEnd();
+        string.Join("  ", cells.Select((c, i) => Ellipsize(c, widths[i]).PadRight(widths[i]))).TrimEnd();
+
+    /// <summary>Shortens a string to <paramref name="width"/> by dropping the middle and inserting "…",
+    /// preserving the head and tail. Used only for table display; JSON keeps full values.</summary>
+    private static string Ellipsize(string s, int width)
+    {
+        if (s.Length <= width) return s;
+        if (width <= 1) return s[..width];
+        int head = (width - 1 + 1) / 2; // bias the head one longer on odd widths
+        int tail = width - 1 - head;
+        return s[..head] + "…" + s[^tail..];
+    }
 
     private static bool IsScalar(object v) =>
         v is string || v is Enum || v.GetType().IsPrimitive || v is decimal || v is DateTime || v is Guid;

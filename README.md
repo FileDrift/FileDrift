@@ -156,6 +156,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 1.0.0-rc4 (2026-06-29)
+
+- **Readable CLI tables for long paths.** The interactive table view now caps each column width and middle-ellipsises over-long values (e.g. UNC paths), so a run's ID and the distinguishing tail of its source/destination stay lined up and scannable instead of the table blowing out to hundreds of columns. JSON output (piped/redirected, or `--json`) is unchanged and still carries full values.
+
 ### 1.0.0-rc3 (2026-06-29)
 
 - **Sign-off workflow is now actually wired up.** The data model had sign-off fields and the report could display them, but nothing could *set* them – there was no way to sign off a run. There now is, in both surfaces:
