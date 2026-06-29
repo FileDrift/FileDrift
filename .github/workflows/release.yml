@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Builds the self-contained release binaries and has them code-signed by SignPath (cloud HSM).
+#
+# Before this works you must, in your SignPath account, create: an Organization, a Project (link it to
+# this GitHub repo as the trusted build system), an Artifact Configuration (sign the two .exe files
+# inside the zip), and a Signing Policy. Then fill in the three IDs/slugs below and add the API token as
+# a repository secret named SIGNPATH_API_TOKEN. SignPath's project page generates the exact snippet for
+# your project — treat the values here as placeholders and confirm input names against their current docs.
+
+name: Release (build + SignPath sign)
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build self-contained single-file binaries
+        shell: pwsh
+        run: ./publish.ps1
+
+      - name: Package unsigned binaries
+        shell: pwsh
+        run: Compress-Archive -Path publish/*.exe -DestinationPath FileDrift-unsigned.zip
+
+      - name: Upload unsigned artifact
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDrift-unsigned
+          path: FileDrift-unsigned.zip
+
+      # Submits the artifact to SignPath, waits for signing, and downloads the signed result.
+      - name: Sign with SignPath
+        uses: SignPath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ''            # TODO: your SignPath organization id
+          project-slug: 'filedrift'      # TODO: your SignPath project slug
+          signing-policy-slug: 'release' # TODO: your signing policy slug (e.g. test-signing / release-signing)
+          artifact-configuration-slug: 'zip-exes' # TODO: your artifact configuration slug
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload signed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDrift-signed
+          path: signed/**

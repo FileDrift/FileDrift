@@ -138,7 +138,11 @@ Produce self-contained, single-file release binaries (no .NET install needed on 
 
   A **self-signed** certificate also works but isn't trusted by other machines until you deploy its public key (Group Policy → Computer Config → Windows Settings → Security Settings → Public Key Policies → Trusted Publishers, and Trusted Root). That's a free, standard approach for internal line-of-business apps.
 
-- **Public releases** — use a publicly-trusted signature. As an open-source (GPL-3.0) project, FileDrift is eligible for [SignPath Foundation](https://signpath.io/) free code signing, which signs release artifacts in CI (the private key lives in SignPath's HSM, not in this repo). That's a CI/GitHub Actions integration rather than the local `sign.ps1` flow. The cheapest paid public-trust alternative is Microsoft's Azure Trusted Signing.
+- **Public releases** — publicly-trusted signing happens in CI. The [`.github/workflows/release.yml`](.github/workflows/release.yml) workflow builds the binaries and submits them to SignPath for signing (the private key lives in SignPath's HSM, never in this repo). It needs a SignPath organization/project plus a `SIGNPATH_API_TOKEN` repository secret. The cheapest paid public-trust alternative is Microsoft's Azure Trusted Signing.
+
+### Code signing attribution
+
+Public Windows release binaries of FileDrift are code-signed by [SignPath.io](https://about.signpath.io/), with a free code-signing certificate granted by the [SignPath Foundation](https://signpath.io/).
 
 ## Changelog
 
