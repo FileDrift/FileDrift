@@ -124,7 +124,7 @@ The Windows account that actually performed the sign-off is **always captured an
 
 You can export a self-contained **HTML certificate** for any completed run — from the **History** page (*Export certificate*) or via `FileDrift-CLI certificate --id <run-id>`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
 
-Each certificate carries a **SHA-256 integrity fingerprint** computed over a canonical block of the run's facts, which is embedded in the file. `FileDrift-CLI certificate --verify <file>` recomputes it and reports whether the certificate is intact; if the run still exists in the local history database, it also confirms the certificate matches that system-of-record. The fingerprint makes alteration *detectable* — it is an integrity check, **not** a cryptographic signature. A run that has not been signed off is stamped with a **"NOT SIGNED OFF" watermark** so an unattested certificate can't be mistaken for an approved one.
+Each certificate carries a **SHA-256 integrity fingerprint that covers the entire document** (the fingerprint is blanked to a placeholder while hashing, then substituted in). `FileDrift-CLI certificate --verify <file>` reverses that and re-hashes the whole file, so **any** later edit — a visible number, the watermark, or the embedded facts — flips the result to *altered*. When the run still exists in the local history database, verify additionally reports whether the certificate's embedded facts still match that system of record (`matchesDatabase`). This makes tampering *detectable*; it is an integrity check, **not** a cryptographic signature (Authenticode file signing is on the post-1.0 backlog). A run that has not been signed off is stamped with a diagonal **"NOT SIGNED OFF" watermark laid over the certificate body** — not just the page margin — so an unattested certificate can't be mistaken for an approved one. The layout is sized to print on a single Letter or A4 page.
 
 > Cryptographic (Authenticode) signing of certificates and a native PDF export are on the post-1.0 backlog.
 
@@ -165,6 +165,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc6 (2026-06-29)
+
+- **Certificate hardening, from rc5 testing:**
+  - **Whole-document integrity.** The SHA-256 fingerprint now covers the entire certificate, not just the embedded facts block, so editing a *visible* value (e.g. changing a displayed count) is detected by `certificate --verify`, not only edits to the machine-readable data. Any byte change flips the result to altered.
+  - **Watermark over the content.** The "NOT SIGNED OFF" watermark is now tiled diagonally *across the certificate body* instead of sitting in the page margin, so it can't be cropped away and stamps the actual data.
+  - **Single-page print.** Tightened the layout so a certificate fits on one Letter or A4 page for filing a hard copy (12 mm print margins, flattened sheet styling, no forced paper size).
 
 ### 1.0.0-rc5 (2026-06-29)
 

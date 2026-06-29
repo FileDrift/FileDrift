@@ -21,6 +21,10 @@ public static class CompletionCertificate
     private const string CanonicalOpen = "<script id=\"filedrift-canonical\" type=\"text/plain\">";
     private const string CanonicalClose = "</script>";
 
+    /// <summary>Stand-in for the fingerprint while the document is hashed (the fingerprint can't hash
+    /// itself). Replaced with the real value after hashing; reversed back before re-hashing in Verify.</summary>
+    private const string FingerprintToken = "{{FILEDRIFT-FINGERPRINT}}";
+
     public sealed record Certificate(string Html, string Fingerprint, string Canonical);
 
     /// <summary>The result of re-checking a certificate file: whether the embedded facts still hash to the
@@ -37,41 +41,55 @@ public static class CompletionCertificate
         return null;
     }
 
-    /// <summary>Builds the certificate for a run. <paramref name="generatedAtUtc"/> is recorded on the
-    /// certificate but is deliberately NOT part of the fingerprint, so re-issuing a certificate for the
-    /// same (unchanged) run yields the same fingerprint.</summary>
+    /// <summary>Builds the certificate for a run. The fingerprint covers the ENTIRE rendered document
+    /// (with the fingerprint itself blanked to a placeholder while hashing), so any later edit — a visible
+    /// value, the watermark, or the embedded facts — is detectable by <see cref="Verify"/>. Two
+    /// certificates generated for the same run with the same <paramref name="generatedAtUtc"/> are
+    /// byte-identical and share a fingerprint; a different generation time yields a different document and
+    /// fingerprint, as each physical certificate is its own artifact.</summary>
     public static Certificate Generate(RunRecord run, string appVersion, DateTime generatedAtUtc)
     {
         var canonical = BuildCanonical(run, appVersion);
-        var fingerprint = ComputeFingerprint(canonical);
-        var html = BuildHtml(run, appVersion, generatedAtUtc, canonical, fingerprint);
+        var template = BuildHtml(run, appVersion, generatedAtUtc, canonical, FingerprintToken);
+        var fingerprint = ComputeFingerprint(template);
+        var html = template.Replace(FingerprintToken, fingerprint);
         return new Certificate(html, fingerprint, canonical);
     }
 
-    /// <summary>SHA-256 (lowercase hex) of the UTF-8 canonical facts.</summary>
-    public static string ComputeFingerprint(string canonical)
+    /// <summary>SHA-256 (lowercase hex) of the supplied UTF-8 content.</summary>
+    public static string ComputeFingerprint(string content)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexStringLower(hash);
     }
 
-    /// <summary>Re-checks a certificate's HTML: extracts the embedded canonical facts and fingerprint,
-    /// recomputes the hash, and reports whether they still match.</summary>
+    /// <summary>Re-checks a certificate's HTML by reversing the fingerprint substitution and re-hashing the
+    /// WHOLE document, so any edit anywhere is caught. Also extracts the embedded canonical facts (and run
+    /// ID) so a caller can additionally cross-check against the system of record.</summary>
     public static VerifyResult Verify(string html)
     {
-        int open = html.IndexOf(CanonicalOpen, StringComparison.Ordinal);
-        int close = open < 0 ? -1 : html.IndexOf(CanonicalClose, open, StringComparison.Ordinal);
         int fpAt = html.IndexOf("data-fingerprint=\"", StringComparison.Ordinal);
-        if (open < 0 || close < 0 || fpAt < 0)
+        if (fpAt < 0)
             return new VerifyResult(false, false, null, null, null, null);
-
-        var canonical = html[(open + CanonicalOpen.Length)..close].Trim('\r', '\n');
         int fpStart = fpAt + "data-fingerprint=\"".Length;
         int fpEnd = html.IndexOf('"', fpStart);
         var embedded = fpEnd < 0 ? "" : html[fpStart..fpEnd];
+        if (embedded.Length != 64) // not our fingerprint format
+            return new VerifyResult(false, false, null, null, null, null);
 
-        var recomputed = ComputeFingerprint(canonical);
-        var runId = ParseRunId(canonical);
+        // Whole-document integrity: put the placeholder back where the fingerprint is and re-hash the file.
+        var template = html.Replace(embedded, FingerprintToken);
+        var recomputed = ComputeFingerprint(template);
+
+        // The canonical facts block (if still present) is what the DB cross-check compares against. If it
+        // was stripped, the document hash already won't match, so intact is false regardless.
+        int open = html.IndexOf(CanonicalOpen, StringComparison.Ordinal);
+        int close = open < 0 ? -1 : html.IndexOf(CanonicalClose, open, StringComparison.Ordinal);
+        string? canonical = open >= 0 && close >= 0
+            ? html[(open + CanonicalOpen.Length)..close].Trim('\r', '\n')
+            : null;
+        var runId = canonical is null ? null : ParseRunId(canonical);
+
         return new VerifyResult(true, string.Equals(recomputed, embedded, StringComparison.Ordinal),
             embedded, recomputed, runId, canonical);
     }
@@ -171,11 +189,15 @@ public static class CompletionCertificate
         sb.Append($"<title>FileDrift Certificate — {E(r.Id.ToString())}</title>\n");
         sb.Append("<style>\n").Append(Css).Append("\n</style>\n</head>\n");
         sb.Append("<body class=\"").Append(signed ? "signed" : "unsigned").Append("\">\n");
-
-        if (!signed)
-            sb.Append("<div class=\"watermark\" aria-hidden=\"true\">").Append(WatermarkText()).Append("</div>\n");
-
         sb.Append("<main class=\"sheet\" data-fingerprint=\"").Append(fingerprint).Append("\">\n");
+
+        // Watermark lives INSIDE the sheet and overlays the certificate body (on top, translucent), so it
+        // is stamped across the actual content rather than sitting in the page margin where it could be
+        // cropped away. (HTML remains editable — this is a visual deterrent; the fingerprint is the check.)
+        if (!signed)
+            sb.Append("<div class=\"watermark\" aria-hidden=\"true\"><div class=\"tile\">")
+              .Append(WatermarkText()).Append("</div></div>\n");
+
         sb.Append("<header><div class=\"brand\">FileDrift</div>")
           .Append("<h1>Certificate of Verification</h1></header>\n");
 
@@ -228,8 +250,8 @@ public static class CompletionCertificate
         sb.Append("<p class=\"fp\">Integrity fingerprint (SHA-256):<br><code>")
           .Append(E(fingerprint)).Append("</code></p>\n");
         sb.Append("<p class=\"fp-note\">Re-check with <code>FileDrift-CLI certificate --verify &lt;file&gt;</code>. ")
-          .Append("The fingerprint detects edits to this certificate's recorded facts; it is an integrity ")
-          .Append("check, not a cryptographic signature.</p>\n");
+          .Append("The fingerprint covers this entire document, so any edit to it is detectable; it is an ")
+          .Append("integrity check, not a cryptographic signature.</p>\n");
         sb.Append("</footer>\n");
 
         // The exact bytes the fingerprint covers, embedded verbatim for re-checking.
@@ -245,7 +267,7 @@ public static class CompletionCertificate
     {
         // Repeat the phrase enough to tile the rotated overlay across a printed page.
         var one = "NOT&nbsp;SIGNED&nbsp;OFF";
-        return string.Join("&nbsp;&nbsp;&nbsp;", Enumerable.Repeat(one, 140));
+        return string.Join("&nbsp;&nbsp;&nbsp;", Enumerable.Repeat(one, 220));
     }
 
     private static string E(string s) => WebUtility.HtmlEncode(s);
@@ -255,43 +277,49 @@ public static class CompletionCertificate
 
     private static string? IsoOrNull(DateTime? utc) => utc is { } v ? Iso(v) : "";
 
+    // Sized to fit a single Letter or A4 page when printed: compact vertical rhythm, no forced @page size
+    // (so the user's paper choice is honoured), 12mm margins, and the sheet styled flat for print.
     private const string Css = """
         :root { --ink:#1b1b1b; --muted:#5a5a5a; --line:#d9d9d9; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; }
         * { box-sizing: border-box; }
-        body { margin:0; padding:32px; font-family:'Segoe UI',system-ui,sans-serif; color:var(--ink);
+        body { margin:0; padding:22px; font-family:'Segoe UI',system-ui,sans-serif; color:var(--ink);
                background:#f3f3f3; }
-        .sheet { position:relative; z-index:1; max-width:820px; margin:0 auto; background:#fff;
-                 border:1px solid var(--line); border-radius:8px; padding:36px 44px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
-        header { text-align:center; border-bottom:2px solid var(--ink); padding-bottom:14px; margin-bottom:22px; }
-        .brand { font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); font-size:13px; }
-        h1 { margin:6px 0 0; font-size:26px; letter-spacing:.02em; }
-        .verdict { display:flex; flex-direction:column; gap:4px; padding:14px 18px; border-radius:6px; margin-bottom:24px;
+        .sheet { position:relative; overflow:hidden; max-width:760px; margin:0 auto; background:#fff;
+                 border:1px solid var(--line); border-radius:8px; padding:28px 36px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+        header { text-align:center; border-bottom:2px solid var(--ink); padding-bottom:8px; margin-bottom:14px; }
+        .brand { font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); font-size:12px; }
+        h1 { margin:4px 0 0; font-size:22px; letter-spacing:.02em; }
+        .verdict { display:flex; flex-direction:column; gap:3px; padding:10px 14px; border-radius:6px; margin-bottom:14px;
                    border:1px solid var(--line); }
-        .verdict .headline { font-size:20px; font-weight:700; letter-spacing:.04em; }
-        .verdict .detail { font-size:13px; color:var(--muted); }
+        .verdict .headline { font-size:18px; font-weight:700; letter-spacing:.04em; }
+        .verdict .detail { font-size:12.5px; color:var(--muted); }
         .verdict.ok   { border-color:var(--ok);  background:#eaf6ec; } .verdict.ok .headline   { color:var(--ok); }
         .verdict.warn { border-color:var(--warn); background:#fbf3e0; } .verdict.warn .headline { color:var(--warn); }
         .verdict.bad  { border-color:var(--bad); background:#fbeaec; } .verdict.bad .headline  { color:var(--bad); }
-        table.facts { width:100%; border-collapse:collapse; margin:0 0 8px; font-size:14px; }
-        table.facts th { text-align:left; width:200px; padding:7px 12px 7px 0; color:var(--muted); font-weight:600;
+        table.facts { width:100%; border-collapse:collapse; margin:0; font-size:13px; position:relative; }
+        table.facts th { text-align:left; width:190px; padding:4px 12px 4px 0; color:var(--muted); font-weight:600;
                          vertical-align:top; border-bottom:1px solid #eee; }
-        table.facts td { padding:7px 0; vertical-align:top; word-break:break-all; border-bottom:1px solid #eee; }
-        section.signoff { margin-top:26px; }
-        section.signoff h2, footer { margin-top:18px; }
-        h2 { font-size:16px; border-bottom:1px solid var(--line); padding-bottom:6px; }
-        .unsigned-note { font-size:13px; color:var(--bad); background:#fbeaec; border:1px solid var(--bad);
-                         border-radius:6px; padding:10px 14px; }
-        footer { margin-top:28px; border-top:1px solid var(--line); padding-top:14px; font-size:12px; color:var(--muted); }
-        footer .fp code { font-size:12px; color:var(--ink); word-break:break-all; }
+        table.facts td { padding:4px 0; vertical-align:top; word-break:break-all; border-bottom:1px solid #eee; }
+        section.signoff { margin-top:14px; }
+        h2 { font-size:15px; border-bottom:1px solid var(--line); padding-bottom:5px; margin:0 0 8px; }
+        .unsigned-note { font-size:12.5px; color:var(--bad); background:#fbeaec; border:1px solid var(--bad);
+                         border-radius:6px; padding:9px 13px; }
+        footer { margin-top:16px; border-top:1px solid var(--line); padding-top:10px; font-size:11.5px; color:var(--muted); }
+        footer p { margin:4px 0; }
+        footer .fp code { font-size:11.5px; color:var(--ink); word-break:break-all; }
         footer .fp-note { font-size:11px; }
-        .watermark { position:fixed; top:-25%; left:-25%; width:150%; height:150%; transform:rotate(-30deg);
-                     font:700 40px 'Segoe UI',sans-serif; color:var(--bad); opacity:.10; line-height:2.6;
-                     letter-spacing:.08em; overflow:hidden; pointer-events:none; z-index:0; user-select:none; }
+        /* Diagonal tiled watermark, laid OVER the certificate body (translucent, non-interactive). */
+        .watermark { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:5; }
+        .watermark .tile { position:absolute; top:-50%; left:-50%; width:200%; height:200%; transform:rotate(-30deg);
+                           font:700 33px 'Segoe UI',sans-serif; color:var(--bad); opacity:.13; line-height:2.9;
+                           letter-spacing:.10em; word-spacing:.4em; user-select:none; }
         @media print {
+            @page { margin:12mm; }
             body { background:#fff; padding:0; }
-            .sheet { border:none; box-shadow:none; max-width:none; }
-            .watermark { opacity:.14; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-            .verdict, .unsigned-note { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            .sheet { border:none; box-shadow:none; max-width:none; border-radius:0; padding:0; }
+            .verdict, .unsigned-note, .watermark .tile {
+                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            .watermark .tile { opacity:.16; }
         }
         """;
 }

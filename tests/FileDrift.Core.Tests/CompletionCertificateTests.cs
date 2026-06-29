@@ -37,28 +37,40 @@ public class CompletionCertificateTests
     }
 
     [Fact]
-    public void Tampering_with_a_displayed_value_is_detected()
+    public void Tampering_with_the_embedded_facts_is_detected()
     {
-        // Edit the visible matched count without updating the embedded canonical → fingerprint still matches
-        // the (untouched) canonical, but the canonical itself no longer matches the recomputed-from-DB path.
-        // Here we tamper the embedded canonical instead, which the self-contained check must catch.
         var cert = CompletionCertificate.Generate(Run(), "1.0.0-test", DateTime.UtcNow);
         var tampered = cert.Html.Replace("matched=100", "matched=999");
 
         var v = CompletionCertificate.Verify(tampered);
         Assert.True(v.Parsed);
-        Assert.False(v.Intact); // recomputed hash of altered canonical != embedded fingerprint
+        Assert.False(v.Intact);
     }
 
     [Fact]
-    public void Fingerprint_is_stable_across_regeneration_of_same_run()
+    public void Tampering_with_a_visible_value_is_also_detected()
+    {
+        // The fingerprint covers the whole document, so editing only the rendered HTML (not the embedded
+        // facts) must still fail verification — this is the case the per-facts hash would have missed.
+        var cert = CompletionCertificate.Generate(Run(differences: 3), "1.0.0-test", DateTime.UtcNow);
+        var tampered = cert.Html.Replace("DIFFERENCES FOUND", "MATCH"); // fake a clean verdict on the page
+        Assert.NotEqual(cert.Html, tampered); // sanity: the visible text was actually present
+
+        var v = CompletionCertificate.Verify(tampered);
+        Assert.True(v.Parsed);
+        Assert.False(v.Intact);
+    }
+
+    [Fact]
+    public void Fingerprint_is_deterministic_for_identical_input()
     {
         var run = Run();
-        var a = CompletionCertificate.Generate(run, "1.0.0-test", new DateTime(2026, 6, 29, 14, 0, 0, DateTimeKind.Utc));
-        var b = CompletionCertificate.Generate(run, "1.0.0-test", new DateTime(2026, 6, 30, 9, 0, 0, DateTimeKind.Utc));
+        var at = new DateTime(2026, 6, 29, 14, 0, 0, DateTimeKind.Utc);
+        var a = CompletionCertificate.Generate(run, "1.0.0-test", at);
+        var b = CompletionCertificate.Generate(run, "1.0.0-test", at);
 
-        // Different generation timestamps must NOT change the fingerprint (it covers run facts only).
         Assert.Equal(a.Fingerprint, b.Fingerprint);
+        Assert.Equal(a.Html, b.Html);
     }
 
     [Fact]
