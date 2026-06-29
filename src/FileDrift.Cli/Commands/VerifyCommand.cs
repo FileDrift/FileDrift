@@ -49,8 +49,8 @@ internal static class VerifyCommand
                     EndUtc = ParseDate(parseResult.GetValue(end), startOfDay: false),
                 };
 
-                var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
-                var destCred = CliServices.ResolveCredential(parseResult.GetValue(credDst));
+                var sourceCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credSrc), srcVal);
+                var destCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credDst), dstVal);
 
                 var result = await CliServices.Verify().RunAsync(
                     srcVal, dstVal, options, sourceCred, destCred, progress: null, ct);

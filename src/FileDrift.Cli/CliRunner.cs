@@ -13,6 +13,7 @@ internal static class CliRunner
         root.Add(ReconcileCommand.Build());
         root.Add(ReportCommand.Build());
         root.Add(HistoryCommand.Build());
+        root.Add(CredentialCommand.Build());
         return await root.Parse(args).InvokeAsync(configuration: null, cancellationToken);
     }
 }

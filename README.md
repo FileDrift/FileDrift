@@ -2,6 +2,8 @@
 
 File comparison and verification tool for Windows. Compares source and destination directory trees — checking names, sizes, timestamps, hashes, and ACLs — with direct MFT enumeration on local NTFS volumes and parallel SMB enumeration for remote shares.
 
+It can also copy source→destination to reconcile differences it finds, which is handy for small fixes and migration cleanup. That copy capability is a convenience, **not** a general-purpose bulk-copy engine — for large or performance-critical transfers, reach for `robocopy` or another dedicated tool. FileDrift's focus is verification and migration sign-off: knowing, and being able to prove, that two trees match.
+
 ![FileDrift wordmark](FileDrift-wordmark.png)
 
 > **A note on authorship:** the code in this project is generated in its entirety by [Claude Code](https://claude.com/claude-code) (Anthropic's AI coding agent), directed and reviewed by the maintainer. This is stated up front in the interest of transparency – some people are rightly particular about AI-generated code, and you should weigh that for your own environment.
@@ -56,22 +58,22 @@ FileDrift-CLI history   [--last 10] [--src \\server\share]
 
 ### Credentials
 
-The CLI never takes a password as an argument. It uses credentials stored in **Windows Credential Manager** under the `FileDrift:` naming convention, referenced by target name with `--cred-source` / `--cred-dest`.
-
-Save one the first time either in the app's **Credentials** page, or headlessly with Windows' built-in `cmdkey` — omit `/pass` so the password is prompted for, never placed on the command line:
+The CLI never takes a password as an argument. Credentials are stored in **Windows Credential Manager** (under the `FileDrift:` convention) and entered through a masked prompt. Manage them with the `credential` command:
 
 ```
-cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"
+FileDrift-CLI credential add --share \\server\share     # prompts for username + password (hidden)
+FileDrift-CLI credential add --default                  # fallback used for any share with no entry of its own
+FileDrift-CLI credential list                           # show what's saved (passwords are never shown)
+FileDrift-CLI credential remove --share \\server\share
 ```
 
-Then reference it by target name:
+Once saved, `verify`, `reconcile`, and `preflight` **resolve the credential automatically** from the path's share root (falling back to the default), so the common case needs no credential flag:
 
 ```
-FileDrift-CLI verify    --src \\server\share --dst D:\target --cred-source "FileDrift:\\server\share"
-FileDrift-CLI reconcile --src \\server\share --dst D:\target --cred-dest   "FileDrift:\\server\share" --yes
+FileDrift-CLI reconcile --src \\server\share --dst D:\target --yes
 ```
 
-Use the target `FileDrift:(default)` for a fallback credential applied to any share without its own entry. Saved targets are visible and editable under Control Panel → Credential Manager.
+To force a specific saved entry, pass `--cred-source` / `--cred-dest` with its target name (e.g. `"FileDrift:\\server\share"`). Entries are also visible and editable in the app's **Credentials** page and under Control Panel → Credential Manager. (Windows' built-in `cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"` works too.)
 
 All CLI output is JSON. Pipe to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
 
@@ -126,6 +128,13 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 0.9.2 (2026-06-26)
+
+- **CLI credential management.** New `FileDrift-CLI credential` command: `add` saves a credential to Windows Credential Manager through a **masked password prompt** (never echoed or passed as an argument), `list` shows what's saved (passwords are never shown), and `remove` deletes one. No more needing `cmdkey` or Credential Manager directly.
+- **Automatic credential resolution.** `verify`, `reconcile`, and `preflight` now resolve the saved credential for a path's share root automatically (falling back to the default), so the common case needs no `--cred-source` / `--cred-dest` flag.
+- **Clearer scope up front.** The README now states plainly that FileDrift can copy/reconcile differences but is a verification and migration-sign-off tool, not a bulk-copy replacement for `robocopy`.
+- **Fixed a misleading post-cancel message.** After a *stopped* reconcile, the activity log no longer claims "re-run Verify to confirm the destination now matches" — it now says the reconcile was stopped and to re-run Verify to see what still differs.
 
 ### 0.9.1 (2026-06-26)
 

@@ -841,7 +841,9 @@ public partial class VerifyPage : Page
             // Destination changed; require a fresh verify before reconciling again.
             _lastDiffs = null;
             _lastRun = null;
-            AppendLog("Re-run Verify to confirm the destination now matches.");
+            AppendLog(result.Stopped
+                ? "Reconcile was stopped before finishing – re-run Verify to see what still differs."
+                : "Re-run Verify to confirm the destination now matches.");
         }
         catch (Exception ex)
         {

@@ -25,6 +25,20 @@ internal static class CliServices
 
         var cred = Credentials().GetCredential(targetName);
         return cred ?? throw new InvalidOperationException(
-            $"No saved credential found for target '{targetName}'. Add it in the app or with Credential Manager.");
+            $"No saved credential found for target '{targetName}'. Add it with 'FileDrift-CLI credential add' or in the app.");
+    }
+
+    /// <summary>Resolves the credential for a path. If <paramref name="explicitTarget"/> is given it is
+    /// used (and must exist); otherwise auto-resolves the saved credential for the path's share root,
+    /// falling back to the default credential — matching how the GUI applies saved credentials. Returns
+    /// null when nothing is saved (e.g. a local path), so no flag is needed in the common case.</summary>
+    public static NetworkCredential? ResolveCredentialForPath(string? explicitTarget, string path)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitTarget))
+            return ResolveCredential(explicitTarget);
+
+        var store = Credentials();
+        return store.GetCredential(CredentialTarget.For(path))
+            ?? store.GetCredential(CredentialTarget.DefaultTarget);
     }
 }

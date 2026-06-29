@@ -53,8 +53,8 @@ internal static class ReconcileCommand
                     EndUtc = VerifyCommand.ParseDate(parseResult.GetValue(end), startOfDay: false),
                 };
 
-                var sourceCred = CliServices.ResolveCredential(parseResult.GetValue(credSrc));
-                var destCred = CliServices.ResolveCredential(parseResult.GetValue(credDst));
+                var sourceCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credSrc), srcVal);
+                var destCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credDst), dstVal);
 
                 // 1) Verify to find what differs (this also enriches ACLs if --acl).
                 var verify = await CliServices.Verify().RunAsync(srcVal, dstVal, options, sourceCred, destCred, progress: null, ct);
