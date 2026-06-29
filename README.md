@@ -52,6 +52,8 @@ FileDrift-CLI verify    --src \\server\share --dst \\server2\share2 [--depth ful
 FileDrift-CLI reconcile --src \\server\share --dst \\server2\share2 [--acl] [--yes]
 FileDrift-CLI report    --id <run-id>
 FileDrift-CLI signoff   --id <run-id> [--by "Approver Name"] [--note "..."] [--force]
+FileDrift-CLI certificate --id <run-id> [--out file|dir]   # generate an HTML certificate
+FileDrift-CLI certificate --verify <file>                  # re-check a certificate's integrity
 FileDrift-CLI history   [--last 10] [--src \\server\share]
 ```
 
@@ -118,6 +120,14 @@ Once you've reviewed a run's results, you can **sign it off** to record that a n
 
 The Windows account that actually performed the sign-off is **always captured and stored separately** from the editable "signed off by" name, so overriding the approver never erases who operated the tool. When the two differ, the run is flagged as a delegated sign-off. `FileDrift-CLI report --id <run-id>` prints the full sign-off block (time, approver, operating account, delegated flag, note).
 
+### Certificate of verification
+
+You can export a self-contained **HTML certificate** for any completed run — from the **History** page (*Export certificate*) or via `FileDrift-CLI certificate --id <run-id>`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
+
+Each certificate carries a **SHA-256 integrity fingerprint** computed over a canonical block of the run's facts, which is embedded in the file. `FileDrift-CLI certificate --verify <file>` recomputes it and reports whether the certificate is intact; if the run still exists in the local history database, it also confirms the certificate matches that system-of-record. The fingerprint makes alteration *detectable* — it is an integrity check, **not** a cryptographic signature. A run that has not been signed off is stamped with a **"NOT SIGNED OFF" watermark** so an unattested certificate can't be mistaken for an approved one.
+
+> Cryptographic (Authenticode) signing of certificates and a native PDF export are on the post-1.0 backlog.
+
 ## Building from source
 
 ```
@@ -155,6 +165,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc5 (2026-06-29)
+
+- **Certificate of verification (HTML).** Export a self-contained certificate for any completed run — from the History page (*Export certificate*) or `FileDrift-CLI certificate --id <run-id>`. It states the verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the run options and counts, and the sign-off block, and is styled to print to PDF.
+  - **Tamper-evident.** Each certificate embeds a SHA-256 fingerprint over a canonical block of the run's facts. `FileDrift-CLI certificate --verify <file>` recomputes it (intact vs altered) and, when the run is still in the local history DB, confirms the certificate matches the system of record. It's an integrity check, not a cryptographic signature.
+  - **Unsigned runs are watermarked.** A run with no sign-off renders a diagonal "NOT SIGNED OFF" watermark, so an unattested certificate can't pass as approved. Inaccessible (skipped) paths force an INCOMPLETE verdict rather than a clean one.
+  - Authenticode signing of certificates and native PDF export are backlogged for post-1.0.
 
 ### 1.0.0-rc4 (2026-06-29)
 

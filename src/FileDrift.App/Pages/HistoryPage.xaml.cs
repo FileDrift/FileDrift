@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using FileDrift.Core;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 using FileDrift.Core.Persistence;
+using FileDrift.Core.Reporting;
 
 namespace FileDrift.App.Pages;
 
@@ -102,6 +104,50 @@ public partial class HistoryPage : Page
             StatusText.Text = $"Sign-off failed: {ex.Message}";
         }
         await LoadAsync();
+    }
+
+    private async void OnExportCertificate(object sender, RoutedEventArgs e)
+    {
+        if (HistoryGrid.SelectedItem is not HistoryRow row)
+        {
+            StatusText.Text = "Select a run to export a certificate.";
+            return;
+        }
+
+        var run = await _repository.GetAsync(row.Id);
+        if (run is null)
+        {
+            StatusText.Text = "That run no longer exists.";
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Save certificate of verification",
+            Filter = "HTML certificate (*.html)|*.html",
+            FileName = $"FileDrift-Certificate-{run.Id.ToString()[..8]}.html",
+            AddExtension = true,
+            DefaultExt = ".html",
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var cert = CompletionCertificate.Generate(run, AppInfo.Version, DateTime.UtcNow);
+            await File.WriteAllTextAsync(dialog.FileName, cert.Html);
+            StatusText.Text = run.SignedOffAtUtc is null
+                ? $"Certificate saved (unsigned run) – {dialog.FileName}"
+                : $"Certificate saved – {dialog.FileName}";
+
+            if (await Dialogs.ConfirmAsync("Certificate saved",
+                    "Open the certificate now?", confirmText: "Open"))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName)
+                { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Certificate export failed: {ex.Message}";
+        }
     }
 
     private sealed record HistoryRow(

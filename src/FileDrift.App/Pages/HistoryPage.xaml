@@ -16,6 +16,9 @@
                 <ui:Button x:Name="SignOffButton" Content="Sign off" Icon="{ui:SymbolIcon Checkmark24}"
                            Appearance="Primary" Click="OnSignOff"
                            ToolTip="Record review sign-off for the selected run." />
+                <ui:Button x:Name="CertButton" Content="Export certificate" Icon="{ui:SymbolIcon DocumentRibbon24}"
+                           Margin="8,0,0,0" Click="OnExportCertificate"
+                           ToolTip="Save an HTML certificate of verification for the selected run." />
                 <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}" Margin="8,0,0,0" Click="OnRefresh" />
             </StackPanel>
         </Grid>
