@@ -119,11 +119,26 @@ dotnet build
 dotnet run --project src/FileDrift.App
 ```
 
-Self-contained single-file publish:
+## Releases & signing
+
+Produce self-contained, single-file release binaries (no .NET install needed on the target) with the helper script:
 
 ```
-dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFile=true -o publish/
+./publish.ps1            # -> publish/FileDrift.exe and publish/FileDrift-CLI.exe (win-x64)
 ```
+
+**Code signing.** The signing path depends on how you're distributing:
+
+- **Internal / your own builds** — sign with a code-signing certificate you control, by thumbprint. A certificate from an **internal/Enterprise CA** is ideal: it's already trusted on every domain-joined machine, so SmartScreen/AppLocker/WDAC are satisfied with no per-machine setup. Signatures are RFC-3161 timestamped (they stay valid after the cert expires):
+
+  ```
+  ./sign.ps1 -Thumbprint <cert-thumbprint>     # signs both exes in publish/
+  ./sign.ps1 -SelfSigned                        # generates a dev cert just to test the pipeline
+  ```
+
+  A **self-signed** certificate also works but isn't trusted by other machines until you deploy its public key (Group Policy → Computer Config → Windows Settings → Security Settings → Public Key Policies → Trusted Publishers, and Trusted Root). That's a free, standard approach for internal line-of-business apps.
+
+- **Public releases** — use a publicly-trusted signature. As an open-source (GPL-3.0) project, FileDrift is eligible for [SignPath Foundation](https://signpath.io/) free code signing, which signs release artifacts in CI (the private key lives in SignPath's HSM, not in this repo). That's a CI/GitHub Actions integration rather than the local `sign.ps1` flow. The cheapest paid public-trust alternative is Microsoft's Azure Trusted Signing.
 
 ## Changelog
 
