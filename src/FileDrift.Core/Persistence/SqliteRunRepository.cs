@@ -9,7 +9,7 @@ namespace FileDrift.Core.Persistence;
 /// <summary>SQLite-backed run history. Creates and migrates its schema on construction.</summary>
 public sealed class SqliteRunRepository : IRunRepository
 {
-    private const int TargetSchemaVersion = 2;
+    private const int TargetSchemaVersion = 3;
 
     private readonly string _connectionString;
 
@@ -58,6 +58,8 @@ public sealed class SqliteRunRepository : IRunRepository
             ApplyMigration1(conn, tx);
         if (current < 2)
             ApplyMigration2(conn, tx);
+        if (current < 3)
+            ApplyMigration3(conn, tx);
 
         if (current < TargetSchemaVersion)
         {
@@ -110,6 +112,12 @@ public sealed class SqliteRunRepository : IRunRepository
     private static void ApplyMigration2(SqliteConnection conn, SqliteTransaction tx) =>
         Execute(conn, tx, "ALTER TABLE runs ADD COLUMN inaccessible_count INTEGER NOT NULL DEFAULT 0;");
 
+    private static void ApplyMigration3(SqliteConnection conn, SqliteTransaction tx)
+    {
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN signed_off_by TEXT NULL;");
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN signed_off_by_account TEXT NULL;");
+    }
+
     private static void Execute(SqliteConnection conn, SqliteTransaction tx, string sql)
     {
         using var cmd = conn.CreateCommand();
@@ -129,12 +137,14 @@ public sealed class SqliteRunRepository : IRunRepository
                 id, started_at_utc, source_path, dest_path, options_json,
                 completed_at_utc, status, total_source_files, total_dest_files,
                 matched_count, different_count, missing_at_dest_count, extra_at_dest_count,
-                sign_off_note, signed_off_at_utc, inaccessible_count)
+                sign_off_note, signed_off_at_utc, inaccessible_count,
+                signed_off_by, signed_off_by_account)
             VALUES (
                 $id, $started, $src, $dst, $options,
                 $completed, $status, $totalSrc, $totalDst,
                 $matched, $different, $missing, $extra,
-                $note, $signedOff, $inaccessible)
+                $note, $signedOff, $inaccessible,
+                $signedBy, $signedByAccount)
             ON CONFLICT(id) DO UPDATE SET
                 started_at_utc        = excluded.started_at_utc,
                 source_path           = excluded.source_path,
@@ -150,7 +160,9 @@ public sealed class SqliteRunRepository : IRunRepository
                 extra_at_dest_count   = excluded.extra_at_dest_count,
                 sign_off_note         = excluded.sign_off_note,
                 signed_off_at_utc     = excluded.signed_off_at_utc,
-                inaccessible_count    = excluded.inaccessible_count;
+                inaccessible_count    = excluded.inaccessible_count,
+                signed_off_by         = excluded.signed_off_by,
+                signed_off_by_account = excluded.signed_off_by_account;
             """;
 
         AddParam(cmd, "$id",        run.Id.ToString());
@@ -169,8 +181,33 @@ public sealed class SqliteRunRepository : IRunRepository
         AddParam(cmd, "$note",      run.SignOffNote);
         AddParam(cmd, "$signedOff", ToIsoOrNull(run.SignedOffAtUtc));
         AddParam(cmd, "$inaccessible", run.InaccessibleCount);
+        AddParam(cmd, "$signedBy",        run.SignedOffBy);
+        AddParam(cmd, "$signedByAccount", run.SignedOffByAccount);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<bool> MarkSignedOffAsync(
+        Guid id, string signedOffBy, string signedOffByAccount, string? note,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = OpenConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE runs SET
+                signed_off_at_utc     = $at,
+                signed_off_by         = $by,
+                signed_off_by_account = $account,
+                sign_off_note         = $note
+            WHERE id = $id;
+            """;
+        AddParam(cmd, "$at",      ToIso(DateTime.UtcNow));
+        AddParam(cmd, "$by",      signedOffBy);
+        AddParam(cmd, "$account", signedOffByAccount);
+        AddParam(cmd, "$note",    note);
+        AddParam(cmd, "$id",      id.ToString());
+
+        return await cmd.ExecuteNonQueryAsync(cancellationToken) > 0;
     }
 
     public async Task<RunRecord?> GetAsync(Guid id, CancellationToken cancellationToken = default)
@@ -253,7 +290,8 @@ public sealed class SqliteRunRepository : IRunRepository
         "id, started_at_utc, source_path, dest_path, options_json, " +
         "completed_at_utc, status, total_source_files, total_dest_files, " +
         "matched_count, different_count, missing_at_dest_count, extra_at_dest_count, " +
-        "sign_off_note, signed_off_at_utc, inaccessible_count";
+        "sign_off_note, signed_off_at_utc, inaccessible_count, " +
+        "signed_off_by, signed_off_by_account";
 
     private static RunRecord Map(SqliteDataReader r)
     {
@@ -275,6 +313,8 @@ public sealed class SqliteRunRepository : IRunRepository
             SignOffNote        = r.IsDBNull(13) ? null : r.GetString(13),
             SignedOffAtUtc     = r.IsDBNull(14) ? null : FromIso(r.GetString(14)),
             InaccessibleCount  = r.GetInt64(15),
+            SignedOffBy        = r.IsDBNull(16) ? null : r.GetString(16),
+            SignedOffByAccount = r.IsDBNull(17) ? null : r.GetString(17),
         };
     }
 

@@ -20,6 +20,13 @@ public interface IRunRepository
         RunQueryOptions? query = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Stamps a run as signed off: records the sign-off time (UTC now), the accountable party,
+    /// the Windows account that performed it, and an optional note. Only the sign-off fields are touched.
+    /// Returns false if no run with that ID exists.</summary>
+    Task<bool> MarkSignedOffAsync(
+        Guid id, string signedOffBy, string signedOffByAccount, string? note,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Permanently deletes a run record. Returns true if it existed.</summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

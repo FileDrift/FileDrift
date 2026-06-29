@@ -53,7 +53,11 @@ internal static class ReportCommand
                     },
                     signOff = new
                     {
+                        signedOff = run.SignedOffAtUtc is not null,
                         signedOffAtUtc = run.SignedOffAtUtc,
+                        signedOffBy = run.SignedOffBy,
+                        signedOffByAccount = run.SignedOffByAccount,
+                        delegated = run.SignOffWasDelegated,
                         note = run.SignOffNote,
                     },
                 });

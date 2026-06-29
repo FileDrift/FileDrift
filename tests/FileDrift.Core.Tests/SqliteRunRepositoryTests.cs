@@ -38,6 +38,111 @@ public class SqliteRunRepositoryTests
     }
 
     [Fact]
+    public async Task MarkSignedOff_records_party_account_and_note()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var run = NewRun(0);
+        await repo.SaveAsync(run);
+
+        bool ok = await repo.MarkSignedOffAsync(run.Id, "Jane Approver", @"CONTOSO\jdoe", "reviewed Q2 migration");
+        Assert.True(ok);
+
+        var loaded = await repo.GetAsync(run.Id);
+        Assert.NotNull(loaded);
+        Assert.NotNull(loaded!.SignedOffAtUtc);
+        Assert.Equal("Jane Approver", loaded.SignedOffBy);
+        Assert.Equal(@"CONTOSO\jdoe", loaded.SignedOffByAccount);
+        Assert.Equal("reviewed Q2 migration", loaded.SignOffNote);
+        Assert.True(loaded.SignOffWasDelegated); // approver differs from operating account
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task MarkSignedOff_same_account_is_not_delegated()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var run = NewRun(0);
+        await repo.SaveAsync(run);
+
+        await repo.MarkSignedOffAsync(run.Id, @"DOM\op", @"DOM\op", null);
+
+        var loaded = await repo.GetAsync(run.Id);
+        Assert.False(loaded!.SignOffWasDelegated);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task MarkSignedOff_returns_false_for_unknown_run()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        Assert.False(await repo.MarkSignedOffAsync(Guid.NewGuid(), "x", "y", null));
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task Migrates_v2_database_adding_signoff_columns()
+    {
+        using var t = new TempDir();
+
+        var seed = new SqliteRunRepository(t.Sub("seed.db"));
+        await seed.SaveAsync(NewRun(0));
+        string optionsJson;
+        using (var c = new SqliteConnection($"Data Source={t.Sub("seed.db")}"))
+        {
+            c.Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "SELECT options_json FROM runs LIMIT 1;";
+            optionsJson = (string)cmd.ExecuteScalar()!;
+        }
+
+        // Hand-build a v2 database: runs table has inaccessible_count but not the sign-off-by columns.
+        var path = t.Sub("v2.db");
+        var oldId = Guid.NewGuid();
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            void E(string sql) { using var c = conn.CreateCommand(); c.CommandText = sql; c.ExecuteNonQuery(); }
+            E("CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (2);");
+            E("""
+                CREATE TABLE runs (
+                    id TEXT PRIMARY KEY, started_at_utc TEXT NOT NULL, source_path TEXT NOT NULL,
+                    dest_path TEXT NOT NULL, options_json TEXT NOT NULL, completed_at_utc TEXT NULL,
+                    status TEXT NOT NULL, total_source_files INTEGER NOT NULL, total_dest_files INTEGER NOT NULL,
+                    matched_count INTEGER NOT NULL, different_count INTEGER NOT NULL,
+                    missing_at_dest_count INTEGER NOT NULL, extra_at_dest_count INTEGER NOT NULL,
+                    sign_off_note TEXT NULL, signed_off_at_utc TEXT NULL,
+                    inaccessible_count INTEGER NOT NULL DEFAULT 0);
+                """);
+            using var ins = conn.CreateCommand();
+            ins.CommandText = "INSERT INTO runs VALUES ($id,$s,$src,$dst,$o,$c,'Completed',0,0,4,0,0,0,NULL,NULL,2);";
+            ins.Parameters.AddWithValue("$id", oldId.ToString());
+            ins.Parameters.AddWithValue("$s", DateTime.UtcNow.ToString("O"));
+            ins.Parameters.AddWithValue("$src", @"\\srv\old");
+            ins.Parameters.AddWithValue("$dst", @"C:\Old");
+            ins.Parameters.AddWithValue("$o", optionsJson);
+            ins.Parameters.AddWithValue("$c", DateTime.UtcNow.ToString("O"));
+            ins.ExecuteNonQuery();
+        }
+
+        // Opening with the current repo triggers the v2->v3 migration (two ADD COLUMNs).
+        var repo = new SqliteRunRepository(path);
+        var oldRun = await repo.GetAsync(oldId);
+        Assert.NotNull(oldRun);
+        Assert.Null(oldRun!.SignedOffBy);         // new columns default null on the existing row
+        Assert.Null(oldRun.SignedOffByAccount);
+        Assert.Equal(4, oldRun.MatchedCount);     // existing data preserved
+        Assert.Equal(2, oldRun.InaccessibleCount);
+
+        Assert.True(await repo.MarkSignedOffAsync(oldId, "Sam", @"DOM\sam", null)); // write path works post-migration
+        var signed = await repo.GetAsync(oldId);
+        Assert.Equal("Sam", signed!.SignedOffBy);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task Migrates_v1_database_adding_inaccessible_column()
     {
         using var t = new TempDir();

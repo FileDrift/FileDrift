@@ -29,5 +29,21 @@ public sealed class RunRecord
     /// <summary>UTC timestamp of sign-off; null until the run is signed off.</summary>
     public DateTime? SignedOffAtUtc { get; set; }
 
+    /// <summary>The accountable party recorded at sign-off. Defaults to the Windows account that performed
+    /// the sign-off (<see cref="SignedOffByAccount"/>) but may be overridden by the operator – e.g. signing
+    /// on behalf of a named approver. Null until the run is signed off.</summary>
+    public string? SignedOffBy { get; set; }
+
+    /// <summary>The Windows account that actually performed the sign-off (DOMAIN\user), captured
+    /// automatically and never editable. Kept alongside <see cref="SignedOffBy"/> so an overridden
+    /// approver name never erases who operated the tool. Null until the run is signed off.</summary>
+    public string? SignedOffByAccount { get; set; }
+
+    /// <summary>True when the recorded approver differs from the operating account – worth surfacing in a
+    /// report so a reviewer sees the sign-off was entered on someone else's behalf.</summary>
+    public bool SignOffWasDelegated =>
+        SignedOffAtUtc is not null &&
+        !string.Equals(SignedOffBy, SignedOffByAccount, StringComparison.OrdinalIgnoreCase);
+
     public long TotalDifferences => DifferentCount + MissingAtDestCount + ExtraAtDestCount;
 }

@@ -51,6 +51,7 @@ FileDrift-CLI preflight --src \\server\share --dst \\server2\share2
 FileDrift-CLI verify    --src \\server\share --dst \\server2\share2 [--depth full] [--acl] [--threads 8]
 FileDrift-CLI reconcile --src \\server\share --dst \\server2\share2 [--acl] [--yes]
 FileDrift-CLI report    --id <run-id>
+FileDrift-CLI signoff   --id <run-id> [--by "Approver Name"] [--note "..."] [--force]
 FileDrift-CLI history   [--last 10] [--src \\server\share]
 ```
 
@@ -108,7 +109,14 @@ Add `--acl` to any depth to also compare security descriptors.
 
 ## Run history and sign-off
 
-Every run is stored in a local SQLite database (`%APPDATA%\FileDrift\history.db`). After reviewing results you can attach a sign-off note, which is included in the exported report.
+Every run is stored in a local SQLite database (`%APPDATA%\FileDrift\history.db`) and listed on the **History** page (and via `FileDrift-CLI history`).
+
+Once you've reviewed a run's results, you can **sign it off** to record that a named party accepts them:
+
+- **In the app** — open History, select the run, and click **Sign off**. The dialog pre-fills the accountable party with the Windows account you're running under; you can change it (e.g. to sign on behalf of a named approver) and add an optional note. The History page then shows the sign-off time and party.
+- **At the CLI** — `FileDrift-CLI signoff --id <run-id> [--by "Approver Name"] [--note "..."]`. Without `--by`, the current Windows account is recorded as the approver. Re-signing an already-signed run requires `--force`.
+
+The Windows account that actually performed the sign-off is **always captured and stored separately** from the editable "signed off by" name, so overriding the approver never erases who operated the tool. When the two differ, the run is flagged as a delegated sign-off. `FileDrift-CLI report --id <run-id>` prints the full sign-off block (time, approver, operating account, delegated flag, note).
 
 ## Building from source
 
@@ -147,6 +155,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc3 (2026-06-29)
+
+- **Sign-off workflow is now actually wired up.** The data model had sign-off fields and the report could display them, but nothing could *set* them – there was no way to sign off a run. There now is, in both surfaces:
+  - **History page** gains a *Sign off* button (and *Signed off* / *By* columns). Selecting a run and signing off records the time, an accountable party, and an optional note in the app's themed dialog.
+  - **CLI** gains `signoff --id <run-id> [--by …] [--note …] [--force]`, for scripted or batch sign-off.
+  - **Identity is captured, not just typed.** The accountable party defaults to the Windows account performing the sign-off and can be overridden (e.g. signing on behalf of a named approver). The operating account is always recorded separately, so an override never erases who actually operated the tool; when the two differ the run is flagged as a delegated sign-off. The history database migrates automatically (v2→v3, two new columns); existing runs are unaffected.
 
 ### 1.0.0-rc2 (2026-06-29)
 

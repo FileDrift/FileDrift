@@ -7,16 +7,22 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0" Margin="0,0,0,16">
             <ui:TextBlock Text="History" FontTypography="Title" VerticalAlignment="Center" />
-            <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}"
-                       HorizontalAlignment="Right" Click="OnRefresh" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button x:Name="SignOffButton" Content="Sign off" Icon="{ui:SymbolIcon Checkmark24}"
+                           Appearance="Primary" Click="OnSignOff"
+                           ToolTip="Record review sign-off for the selected run." />
+                <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}" Margin="8,0,0,0" Click="OnRefresh" />
+            </StackPanel>
         </Grid>
 
         <DataGrid x:Name="HistoryGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
-                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False">
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
+                  SelectionMode="Single">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Started" Binding="{Binding Started}" Width="160" />
                 <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
@@ -25,7 +31,12 @@
                 <DataGridTextColumn Header="Matched" Binding="{Binding Matched}" Width="90" />
                 <DataGridTextColumn Header="Differences" Binding="{Binding Differences}" Width="100" />
                 <DataGridTextColumn Header="Inaccessible" Binding="{Binding Inaccessible}" Width="100" />
+                <DataGridTextColumn Header="Signed off" Binding="{Binding SignedOff}" Width="150" />
+                <DataGridTextColumn Header="By" Binding="{Binding SignedOffBy}" Width="160" />
             </DataGrid.Columns>
         </DataGrid>
+
+        <ui:TextBlock x:Name="StatusText" Grid.Row="2" Margin="2,10,0,0"
+                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
     </Grid>
 </Page>
