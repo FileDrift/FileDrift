@@ -75,7 +75,7 @@ FileDrift-CLI reconcile --src \\server\share --dst D:\target --yes
 
 To force a specific saved entry, pass `--cred-source` / `--cred-dest` with its target name (e.g. `"FileDrift:\\server\share"`). Entries are also visible and editable in the app's **Credentials** page and under Control Panel → Credential Manager. (Windows' built-in `cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"` works too.)
 
-All CLI output is JSON. Pipe to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
+CLI output is a **human-readable table** in an interactive console (handy for quick lookups) and **JSON** when the output is piped or redirected — so scripts always get JSON. Force either with `--table` or `--json`. Pipe the JSON to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
 
 ## Enumeration strategy
 
@@ -128,6 +128,10 @@ dotnet publish src/FileDrift.App -c Release --self-contained -p:PublishSingleFil
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 0.9.3 (2026-06-29)
+
+- **Human-readable CLI output.** CLI commands now print an aligned table in an interactive console (handy for quick lookups like `FileDrift-CLI credential list` or `FileDrift-CLI history`) and JSON when the output is piped or redirected, so scripts are unaffected. Force either with `--table` or `--json`.
 
 ### 0.9.2 (2026-06-26)
 

@@ -7,6 +7,14 @@ internal static class CliRunner
 {
     internal static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
+        // Output format: explicit --json/--table wins; otherwise a table in an interactive console and
+        // JSON when redirected/piped (so scripts always get JSON). Strip the flags before parsing.
+        CliOutput.Format =
+            args.Contains("--json")  ? OutputFormat.Json :
+            args.Contains("--table") ? OutputFormat.Table :
+            Console.IsOutputRedirected ? OutputFormat.Json : OutputFormat.Table;
+        args = args.Where(a => a is not ("--json" or "--table")).ToArray();
+
         var root = new RootCommand("FileDrift – file comparison and verification tool");
         root.Add(PreflightCommand.Build());
         root.Add(VerifyCommand.Build());
