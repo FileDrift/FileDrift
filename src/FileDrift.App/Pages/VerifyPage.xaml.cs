@@ -23,6 +23,7 @@ public partial class VerifyPage : Page
     private readonly VerifyEngine _engine;
     private readonly PreflightEngine _preflight;
     private readonly ReconcileEngine _reconcile = new();
+    private readonly IRunRepository _repository = new SqliteRunRepository();
     private readonly ICredentialStore _credentials = new WindowsCredentialStore();
     private CancellationTokenSource? _cts;            // hard cancel (abort + rollback)
     private CancellationTokenSource? _softStop;       // soft stop (finish current, stop before next) — reconcile only
@@ -41,7 +42,7 @@ public partial class VerifyPage : Page
     public VerifyPage()
     {
         InitializeComponent();
-        _engine = new VerifyEngine(_enumerator, new SqliteRunRepository());
+        _engine = new VerifyEngine(_enumerator, _repository);
         _preflight = new PreflightEngine(_enumerator);
         AppActivity.RequestReconcileStopForClose = RequestStopForCloseAsync;
         Loaded += OnLoaded;
@@ -435,6 +436,7 @@ public partial class VerifyPage : Page
             _lastRun = result.Run;
             _lastSrc = src; _lastDst = dst;
             _lastSrcCred = srcCred; _lastDstCred = dstCred;
+            UpdateComplianceState(); // a completed verify can now be signed off / certified
         }
         catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
         catch (Exception ex)
@@ -872,6 +874,7 @@ public partial class VerifyPage : Page
             // Destination changed; require a fresh verify before reconciling again.
             _lastDiffs = null;
             _lastRun = null;
+            UpdateComplianceState(); // stale run — disable sign-off/export until a fresh verify
             AppendLog(result.Stopped
                 ? "Reconcile was stopped before finishing – re-run Verify to see what still differs."
                 : "Re-run Verify to confirm the destination now matches.");
@@ -995,6 +998,7 @@ public partial class VerifyPage : Page
             ApplyStrictState();      // restore forced/disabled controls if Strict is on
             UpdateReconcileState();  // re-enable Reconcile/Preview if the last verify is actionable
         }
+        UpdateComplianceState();     // Sign off / Export certificate follow the same run lifecycle
     }
 
     /// <summary>Enables Preview/Reconcile when the last completed verify has files to copy or overwrite.</summary>
@@ -1003,6 +1007,28 @@ public partial class VerifyPage : Page
         bool actionable = _lastRun is { } run &&
             run.MissingAtDestCount + run.DifferentCount > 0;
         PreviewButton.IsEnabled = ReconcileButton.IsEnabled = actionable;
+    }
+
+    /// <summary>Enables Sign off / Export certificate once a verify has completed (so they act on a real
+    /// run), and disables them while a run is in progress.</summary>
+    private void UpdateComplianceState()
+    {
+        bool ready = _lastRun is not null && !_running;
+        VerifySignOffButton.IsEnabled = VerifyCertButton.IsEnabled = ready;
+    }
+
+    private async void OnVerifySignOff(object sender, RoutedEventArgs e)
+    {
+        if (_lastRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
+        var status = await ComplianceActions.SignOffAsync(_repository, run);
+        if (status is not null) StatusText.Text = status;
+    }
+
+    private async void OnVerifyExportCertificate(object sender, RoutedEventArgs e)
+    {
+        if (_lastRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
+        var status = await ComplianceActions.ExportCertificateAsync(run);
+        if (status is not null) StatusText.Text = status;
     }
 
     private static string Bytes(long? bytes) => bytes is { } b ? FormatSize(b) : "?";

@@ -10,13 +10,13 @@ namespace FileDrift.App;
 /// OS message box. All are modal over the main window and return a typed result.</summary>
 public static class Dialogs
 {
-    /// <summary>A single-button informational dialog.</summary>
-    public static async Task InfoAsync(string title, string message)
+    /// <summary>A single-button informational dialog. Content may be a string or a built control.</summary>
+    public static async Task InfoAsync(string title, object content)
     {
         var box = new Wpf.Ui.Controls.MessageBox
         {
             Title = title,
-            Content = message,
+            Content = content,
             CloseButtonText = "OK",
         };
         SetOwner(box);

@@ -265,9 +265,11 @@ public static class CompletionCertificate
 
     private static string WatermarkText()
     {
-        // Repeat the phrase enough to tile the rotated overlay across a printed page.
-        var one = "NOT&nbsp;SIGNED&nbsp;OFF";
-        return string.Join("&nbsp;&nbsp;&nbsp;", Enumerable.Repeat(one, 220));
+        // Each phrase is its own inline-block so the flex container can wrap them into a tiled grid that
+        // fills the rotated overlay. (Earlier the phrases were joined by non-breaking spaces, so the whole
+        // thing was one unbreakable line that never tiled and fell outside the clip region.)
+        var span = "<span>NOT&nbsp;SIGNED&nbsp;OFF</span>";
+        return string.Concat(Enumerable.Repeat(span, 120));
     }
 
     private static string E(string s) => WebUtility.HtmlEncode(s);
@@ -308,16 +310,19 @@ public static class CompletionCertificate
         footer p { margin:4px 0; }
         footer .fp code { font-size:11.5px; color:var(--ink); word-break:break-all; }
         footer .fp-note { font-size:11px; }
-        /* Diagonal tiled watermark, laid OVER the certificate body (translucent, non-interactive). */
+        /* Diagonal tiled watermark, laid OVER the certificate body (translucent, non-interactive). The
+           tile is an over-sized rotated flex box; the phrases wrap to fill it and the sheet clips it. */
         .watermark { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:5; }
-        .watermark .tile { position:absolute; top:-50%; left:-50%; width:200%; height:200%; transform:rotate(-30deg);
-                           font:700 33px 'Segoe UI',sans-serif; color:var(--bad); opacity:.13; line-height:2.9;
-                           letter-spacing:.10em; word-spacing:.4em; user-select:none; }
+        .watermark .tile { position:absolute; top:-30%; left:-30%; width:160%; height:160%; transform:rotate(-30deg);
+                           display:flex; flex-wrap:wrap; align-content:center; justify-content:center;
+                           gap:26px 46px; opacity:.13; user-select:none; }
+        .watermark .tile span { font:700 30px 'Segoe UI',sans-serif; color:var(--bad); white-space:nowrap;
+                                letter-spacing:.10em; }
         @media print {
             @page { margin:12mm; }
             body { background:#fff; padding:0; }
             .sheet { border:none; box-shadow:none; max-width:none; border-radius:0; padding:0; }
-            .verdict, .unsigned-note, .watermark .tile {
+            .verdict, .unsigned-note, .watermark .tile, .watermark .tile span {
                 -webkit-print-color-adjust:exact; print-color-adjust:exact; }
             .watermark .tile { opacity:.16; }
         }

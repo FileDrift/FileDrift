@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using FileDrift.Core;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 using FileDrift.Core.Persistence;
-using FileDrift.Core.Reporting;
 
 namespace FileDrift.App.Pages;
 
@@ -43,66 +40,11 @@ public partial class HistoryPage : Page
             return;
         }
 
-        if (row.IsSignedOff &&
-            !await Dialogs.ConfirmAsync("Already signed off",
-                $"This run was signed off on {row.SignedOff} by {row.SignedOffBy}. Record a new sign-off over it?",
-                confirmText: "Re-sign", danger: true))
-            return;
+        var run = await _repository.GetAsync(row.Id);
+        if (run is null) { StatusText.Text = "That run no longer exists."; return; }
 
-        var account = OperatorIdentity.Current;
-
-        // Editable approver (defaults to the operating account) and an optional note.
-        var byBox = new Wpf.Ui.Controls.TextBox { Text = account, MinWidth = 340 };
-        var noteBox = new Wpf.Ui.Controls.TextBox
-        {
-            PlaceholderText = "Optional note (what was reviewed, ticket #, …)",
-            MinWidth = 340, MinHeight = 64, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-
-        var panel = new StackPanel { MaxWidth = 380 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"{row.Source}  →  {row.Dest}",
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4),
-            Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush"),
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"{row.Matched} matched · {row.Differences} difference(s) · {row.Inaccessible} inaccessible",
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12),
-            Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush"),
-        });
-        panel.Children.Add(new TextBlock { Text = "Signed off by", FontWeight = FontWeights.SemiBold });
-        panel.Children.Add(byBox);
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"Operating account ({account}) is recorded separately and cannot be changed.",
-            TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 10),
-            Foreground = (System.Windows.Media.Brush)FindResource("TextFillColorSecondaryBrush"),
-        });
-        panel.Children.Add(new TextBlock { Text = "Note", FontWeight = FontWeights.SemiBold });
-        panel.Children.Add(noteBox);
-
-        if (!await Dialogs.ConfirmAsync("Sign off run", panel, confirmText: "Sign off"))
-            return;
-
-        var by = string.IsNullOrWhiteSpace(byBox.Text) ? account : byBox.Text.Trim();
-        var note = string.IsNullOrWhiteSpace(noteBox.Text) ? null : noteBox.Text.Trim();
-
-        try
-        {
-            bool ok = await _repository.MarkSignedOffAsync(row.Id, by, account, note);
-            StatusText.Text = ok
-                ? (string.Equals(by, account, StringComparison.OrdinalIgnoreCase)
-                    ? $"Signed off by {by}."
-                    : $"Signed off as {by} (operated by {account}).")
-                : "That run no longer exists.";
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Sign-off failed: {ex.Message}";
-        }
+        var status = await ComplianceActions.SignOffAsync(_repository, run);
+        if (status is not null) StatusText.Text = status;
         await LoadAsync();
     }
 
@@ -115,39 +57,16 @@ public partial class HistoryPage : Page
         }
 
         var run = await _repository.GetAsync(row.Id);
-        if (run is null)
-        {
-            StatusText.Text = "That run no longer exists.";
-            return;
-        }
+        if (run is null) { StatusText.Text = "That run no longer exists."; return; }
 
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "Save certificate of verification",
-            Filter = "HTML certificate (*.html)|*.html",
-            FileName = $"FileDrift-Certificate-{run.Id.ToString()[..8]}.html",
-            AddExtension = true,
-            DefaultExt = ".html",
-        };
-        if (dialog.ShowDialog() != true) return;
+        var status = await ComplianceActions.ExportCertificateAsync(run);
+        if (status is not null) StatusText.Text = status;
+    }
 
-        try
-        {
-            var cert = CompletionCertificate.Generate(run, AppInfo.Version, DateTime.UtcNow);
-            await File.WriteAllTextAsync(dialog.FileName, cert.Html);
-            StatusText.Text = run.SignedOffAtUtc is null
-                ? $"Certificate saved (unsigned run) – {dialog.FileName}"
-                : $"Certificate saved – {dialog.FileName}";
-
-            if (await Dialogs.ConfirmAsync("Certificate saved",
-                    "Open the certificate now?", confirmText: "Open"))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName)
-                { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"Certificate export failed: {ex.Message}";
-        }
+    private async void OnVerifyCertificate(object sender, RoutedEventArgs e)
+    {
+        var status = await ComplianceActions.VerifyCertificateAsync(_repository);
+        if (status is not null) StatusText.Text = status;
     }
 
     private sealed record HistoryRow(
