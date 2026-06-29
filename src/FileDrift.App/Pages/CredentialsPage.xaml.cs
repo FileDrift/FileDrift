@@ -142,5 +142,44 @@ public partial class CredentialsPage : Page
         }
     }
 
+    private void OnClearAll(object sender, RoutedEventArgs e)
+    {
+        List<string> targets;
+        try
+        {
+            targets = _credentials.ListTargets().ToList();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Could not list credentials: {ex.Message}";
+            return;
+        }
+
+        if (targets.Count == 0)
+        {
+            StatusText.Text = "No FileDrift credentials to clear.";
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Remove all {targets.Count} credential(s) FileDrift has stored (per-share and default)?\n\n" +
+            "This only affects FileDrift's own entries in Windows Credential Manager and cannot be undone.",
+            "Clear all credentials", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes) return;
+
+        int removed = 0;
+        var failures = new List<string>();
+        foreach (var target in targets)
+        {
+            try { if (_credentials.DeleteCredential(target)) removed++; }
+            catch (Exception ex) { failures.Add($"{CredentialTarget.Display(target)}: {ex.Message}"); }
+        }
+
+        StatusText.Text = failures.Count == 0
+            ? $"Cleared {removed} credential(s)."
+            : $"Cleared {removed}; {failures.Count} failed ({string.Join("; ", failures)}).";
+        Reload();
+    }
+
     private sealed record CredRow(string Share, string User, string Target);
 }

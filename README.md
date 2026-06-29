@@ -148,6 +148,11 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 1.0.0-rc1 (2026-06-29)
+
+- **Clear all credentials.** The Credentials page gains a *Clear all* button that removes every entry FileDrift has stored — per-share and default — in one step, after a confirmation prompt. It is scoped to FileDrift's own targets in Windows Credential Manager and touches nothing else. This rounds out the credential management on the page, which already supported saving, per-share delete, and clearing the default.
+- First release candidate for 1.0.
+
 ### 0.9.4 (2026-06-29)
 
 - **Estimated time remaining on reconcile.** Next to the transfer rate, the readout now shows an approximate `~ N min left` while copying. It is derived from the *same* ~10-second smoothed rate (not an instantaneous spike), only appears once that rate has settled and bytes remain, blanks out when nothing is moving or once you've chosen to stop, and rounds up so it never under-promises. It is deliberately marked approximate (the `~` and the tooltip) and will drift if the transfer rate does.
