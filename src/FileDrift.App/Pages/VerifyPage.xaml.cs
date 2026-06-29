@@ -80,7 +80,10 @@ public partial class VerifyPage : Page
         SyncThrottleSlider(); // reflect the current log-throttle (it may have been changed in Settings)
     }
 
-    private bool _syncingThrottle;
+    // Starts true so the Minimum="0.5" coercion that fires ValueChanged during InitializeComponent
+    // (before the page loads and SyncThrottleSlider applies the saved value) does not persist 0.5 over
+    // the user's real setting. SyncThrottleSlider clears it once the live value has been applied.
+    private bool _syncingThrottle = true;
 
     /// <summary>Sets the Verify-page log-throttle slider to the live value without re-persisting it.</summary>
     private void SyncThrottleSlider()

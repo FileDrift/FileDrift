@@ -142,7 +142,7 @@ public partial class CredentialsPage : Page
         }
     }
 
-    private void OnClearAll(object sender, RoutedEventArgs e)
+    private async void OnClearAll(object sender, RoutedEventArgs e)
     {
         List<string> targets;
         try
@@ -161,11 +161,12 @@ public partial class CredentialsPage : Page
             return;
         }
 
-        var answer = MessageBox.Show(
-            $"Remove all {targets.Count} credential(s) FileDrift has stored (per-share and default)?\n\n" +
-            "This only affects FileDrift's own entries in Windows Credential Manager and cannot be undone.",
-            "Clear all credentials", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (answer != MessageBoxResult.Yes) return;
+        var confirmed = await Dialogs.ConfirmAsync(
+            "Clear all credentials",
+            BuildClearAllContent(targets),
+            confirmText: $"Remove {targets.Count}",
+            danger: true);
+        if (!confirmed) return;
 
         int removed = 0;
         var failures = new List<string>();
@@ -179,6 +180,34 @@ public partial class CredentialsPage : Page
             ? $"Cleared {removed} credential(s)."
             : $"Cleared {removed}; {failures.Count} failed ({string.Join("; ", failures)}).";
         Reload();
+    }
+
+    /// <summary>A themed confirmation body: the warning, then one line per credential (label – username)
+    /// so the user sees exactly which accounts are about to be removed.</summary>
+    private StackPanel BuildClearAllContent(IReadOnlyList<string> targets)
+    {
+        var panel = new StackPanel { MaxWidth = 420 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "These FileDrift credentials will be permanently removed from Windows Credential Manager. " +
+                   "Nothing outside FileDrift's own entries is touched. This cannot be undone.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+
+        foreach (var target in targets.OrderBy(t => CredentialTarget.IsDefault(t) ? "" : CredentialTarget.Display(t)))
+        {
+            string label = CredentialTarget.IsDefault(target) ? "Default" : CredentialTarget.Display(target);
+            string user;
+            try { user = _credentials.GetCredential(target)?.UserName ?? "(no user)"; }
+            catch { user = "(unreadable)"; }
+
+            var line = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 1) };
+            line.Inlines.Add(new System.Windows.Documents.Run(label) { FontWeight = FontWeights.SemiBold });
+            line.Inlines.Add(new System.Windows.Documents.Run(" – " + user));
+            panel.Children.Add(line);
+        }
+        return panel;
     }
 
     private sealed record CredRow(string Share, string User, string Target);

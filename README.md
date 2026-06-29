@@ -148,6 +148,11 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 1.0.0-rc2 (2026-06-29)
+
+- **Fixed: live-refresh interval reset to 0.5 s on every launch.** The Verify page's throttle slider has a 0.5 s minimum; when the page was built, that minimum coerced the slider's initial value and fired a change event *before* the saved setting was applied, silently overwriting the stored interval with the floor. The slider now ignores that construction-time event, so your chosen interval persists across restarts.
+- **Clear all credentials now uses the app's themed dialog and lists what it will remove.** The confirmation matches the rest of the app's Fluent styling (instead of the OS message box) and itemizes each credential about to be deleted by label and username, so you can see exactly which accounts are affected before confirming.
+
 ### 1.0.0-rc1 (2026-06-29)
 
 - **Clear all credentials.** The Credentials page gains a *Clear all* button that removes every entry FileDrift has stored — per-share and default — in one step, after a confirmation prompt. It is scoped to FileDrift's own targets in Windows Credential Manager and touches nothing else. This rounds out the credential management on the page, which already supported saving, per-share delete, and clearing the default.
