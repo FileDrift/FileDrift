@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.App.Settings;
 
 /// <summary>A named one-click appearance bundle: a base theme plus accent (buttons/highlights),

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Engine;
 
 /// <summary>The naming convention for FileDrift credentials in Windows Credential Manager.

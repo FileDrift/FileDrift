@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Engine;
 
 public static class NetworkPath

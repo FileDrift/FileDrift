@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Models;
 
 /// <summary>What a reconcile step does to the destination file.</summary>

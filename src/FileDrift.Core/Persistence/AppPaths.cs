@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Persistence;
 
 /// <summary>Resolves FileDrift's per-user data locations.</summary>

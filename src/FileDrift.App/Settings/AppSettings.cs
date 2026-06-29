@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.App.Settings;
 
 /// <summary>User-facing preferences persisted to %APPDATA%\FileDrift\settings.json.</summary>

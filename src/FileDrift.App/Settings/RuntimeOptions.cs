@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.App.Settings;
 
 /// <summary>In-memory mirror of settings that a run reads live on each tick, so a change in the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Engine;
 
 /// <summary>Parses SDDL security descriptors to compare the EXPLICIT (non-inherited) DACL ACEs —

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Models;
 
 /// <summary>The outcome of a verify run: the persisted summary plus the full per-file comparison set.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.App;
 
 /// <summary>App-wide flags for whether a long operation is running, so the main window can warn before

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;

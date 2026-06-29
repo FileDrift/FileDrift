@@ -246,4 +246,8 @@ Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` 
 
 ## License
 
-[PolyForm Noncommercial License 1.0.0](LICENSE) – free for noncommercial use (including government, educational, and other noncommercial organizations); commercial use requires a separate license.
+[GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`).
+
+FileDrift was previously published under the PolyForm Noncommercial License 1.0.0. As the sole copyright holder, the maintainer has relicensed the project — including all earlier versions — under GPL-3.0-or-later. You may use, modify, and redistribute it under those terms; derivative works and distributions must remain open under the same license.
+
+Third-party dependencies keep their own licenses (WPF-UI, System.CommandLine, and Microsoft.Data.Sqlite are MIT-licensed and GPL-compatible).

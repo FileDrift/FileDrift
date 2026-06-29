@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Models;
 
 /// <summary>Represents a single enumerated file entry from either an MFT or SMB scan.

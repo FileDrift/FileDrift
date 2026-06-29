@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 using FileDrift.Core.Models;
 using FileDrift.Core.Persistence;
 using Microsoft.Data.Sqlite;
