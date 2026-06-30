@@ -122,7 +122,7 @@ The Windows account that actually performed the sign-off is **always captured an
 
 ### Certificate of verification
 
-You can export a self-contained **HTML certificate** for any completed run — from the main **Verify** page (the *Sign off* and *Export certificate* buttons on the right of the live-refresh bar act on the run that just completed), from the **History** page (*Export certificate* for any past run), or via `FileDrift-CLI certificate --id <run-id>`. The History page also has a **Verify certificate…** button — the GUI equivalent of `certificate --verify` — that opens a certificate file and reports whether it is intact and whether it matches the local history database. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
+You can export a self-contained **HTML certificate** for any completed run — from the main **Verify** page (the *Sign off* and *Export certificate* buttons on the right of the live-refresh bar act on the run that just completed), from the **History** page (*Export certificate* for any past run), or via `FileDrift-CLI certificate --id <run-id>`. The **Compliance** tab is the home for checking certificates: *Verify certificate…* checks a single file, and *Verify folder…* re-checks every `.html` certificate under a folder (recursively) and lists the results altered-first — handy for auditing an archive of filed certificates. (The History page has the single-file *Verify certificate…* too, for convenience.) Both are the GUI equivalent of `certificate --verify`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
 
 Each certificate carries a **SHA-256 integrity fingerprint that covers the entire document** (the fingerprint is blanked to a placeholder while hashing, then substituted in). `FileDrift-CLI certificate --verify <file>` reverses that and re-hashes the whole file, so **any** later edit — a visible number, the watermark, or the embedded facts — flips the result to *altered*. When the run still exists in the local history database, verify additionally reports whether the certificate's embedded facts still match that system of record (`matchesDatabase`). This makes tampering *detectable*; it is an integrity check, **not** a cryptographic signature (Authenticode file signing is on the post-1.0 backlog). A run that has not been signed off is stamped with a diagonal **"NOT SIGNED OFF" watermark laid over the certificate body** — not just the page margin — so an unattested certificate can't be mistaken for an approved one. The layout is sized to print on a single Letter or A4 page.
 
@@ -165,6 +165,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc8 (2026-06-29)
+
+- **Compliance tab.** A dedicated tab for certificate verification, separate from History. *Verify certificate…* checks one file; *Verify folder…* recursively re-checks every `.html` certificate under a folder and lists them altered-first (intact / altered / not-a-certificate, plus whether each still matches this machine's history database) — for auditing an archive of filed certificates at once. Per-run sign-off and certificate export remain on the Verify and History pages.
 
 ### 1.0.0-rc7 (2026-06-29)
 

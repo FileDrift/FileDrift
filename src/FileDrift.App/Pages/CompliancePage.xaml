@@ -1,0 +1,60 @@
+<Page x:Class="FileDrift.App.Pages.CompliancePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Compliance"
+      FontSize="13">
+    <Grid Margin="24,16,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TextBlock Grid.Row="0" Text="Compliance" FontTypography="Title" Margin="0,0,0,2" />
+        <ui:TextBlock Grid.Row="1" Margin="0,0,0,14"
+                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12"
+                      Text="Verify certificates of verification — confirm a saved certificate has not been altered since FileDrift produced it, and (when the run is still in this machine's history) that it matches the system of record. Sign-off and certificate export for a specific run live on the Verify and History pages." />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
+            <ui:Button Content="Verify certificate…" Icon="{ui:SymbolIcon DocumentCheckmark24}"
+                       Appearance="Primary" Click="OnVerifyFile"
+                       ToolTip="Open one certificate file and check it." />
+            <ui:Button Content="Verify folder…" Icon="{ui:SymbolIcon FolderOpen24}" Margin="8,0,0,0"
+                       Click="OnVerifyFolder"
+                       ToolTip="Check every .html certificate under a folder (recursively)." />
+            <ui:Button x:Name="ClearButton" Content="Clear" Icon="{ui:SymbolIcon Eraser24}" Margin="8,0,0,0"
+                       Click="OnClear" IsEnabled="False" ToolTip="Clear the results below." />
+        </StackPanel>
+
+        <DataGrid x:Name="ResultsGrid" Grid.Row="3" AutoGenerateColumns="False" IsReadOnly="True"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
+                  SelectionMode="Single" FontSize="12" RowHeight="26">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="File" Binding="{Binding File}" Width="*" />
+                <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="150">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Result}" Value="ALTERED">
+                                    <Setter Property="Foreground" Value="#cf222e" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Result}" Value="Intact">
+                                    <Setter Property="Foreground" Value="#1a7f37" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Matches DB" Binding="{Binding MatchesDb}" Width="100" />
+                <DataGridTextColumn Header="Run ID" Binding="{Binding RunId}" Width="280" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <ui:TextBlock x:Name="StatusText" Grid.Row="4" Margin="2,10,0,0"
+                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+    </Grid>
+</Page>

@@ -9,8 +9,12 @@ using FileDrift.Core.Reporting;
 
 namespace FileDrift.App;
 
-/// <summary>Shared sign-off / certificate actions so the Verify page and History page (and any future
-/// compliance surface) behave identically. Each returns a status line to show, or null if cancelled.</summary>
+/// <summary>One row of a batch certificate check. <paramref name="Severity"/> orders the table:
+/// 0 intact, 1 not-a-certificate, 2 altered, 3 error (higher = more attention).</summary>
+internal sealed record CertCheck(string File, string Path, string Result, string MatchesDb, string RunId, int Severity);
+
+/// <summary>Shared sign-off / certificate actions so the Verify page and History page (and the Compliance
+/// page) behave identically. Each returns a status line to show, or null if cancelled.</summary>
 internal static class ComplianceActions
 {
     public static async Task<string?> SignOffAsync(IRunRepository repository, RunRecord run)
@@ -159,6 +163,51 @@ internal static class ComplianceActions
         {
             return $"Verification failed: {ex.Message}";
         }
+    }
+
+    /// <summary>Verifies every <c>*.html</c> under a folder (recursively) and returns one row per file,
+    /// most-suspect first (altered, then non-certificates, then intact).</summary>
+    public static async Task<IReadOnlyList<CertCheck>> VerifyFolderAsync(IRunRepository repository, string folder)
+    {
+        var rows = new List<CertCheck>();
+        IEnumerable<string> files;
+        try { files = Directory.EnumerateFiles(folder, "*.html", SearchOption.AllDirectories); }
+        catch (Exception ex) { return [new CertCheck("(folder)", folder, $"Error: {ex.Message}", "", "", 3)]; }
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var html = await File.ReadAllTextAsync(file);
+                var v = CompletionCertificate.Verify(html);
+                if (!v.Parsed)
+                {
+                    rows.Add(new CertCheck(Path.GetFileName(file), file, "Not a certificate", "", "", 1));
+                    continue;
+                }
+
+                string db = "—";
+                if (v.RunId is Guid rid && v.Canonical is not null)
+                {
+                    var run = await repository.GetAsync(rid);
+                    if (run is not null)
+                    {
+                        var appVer = CompletionCertificate.CanonicalField(v.Canonical, "appVersion") ?? AppInfo.Version;
+                        db = string.Equals(CompletionCertificate.BuildCanonical(run, appVer), v.Canonical,
+                            StringComparison.Ordinal) ? "Yes" : "No";
+                    }
+                }
+
+                rows.Add(new CertCheck(Path.GetFileName(file), file, v.Intact ? "Intact" : "ALTERED",
+                    db, v.RunId?.ToString() ?? "", v.Intact ? 0 : 2));
+            }
+            catch (Exception ex)
+            {
+                rows.Add(new CertCheck(Path.GetFileName(file), file, $"Error: {ex.Message}", "", "", 3));
+            }
+        }
+
+        return rows.OrderByDescending(r => r.Severity).ThenBy(r => r.File, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static TextBlock Muted(string text, double l, double t, double r, double b, double size = 12) => new()
