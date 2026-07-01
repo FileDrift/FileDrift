@@ -82,11 +82,12 @@ public static class CompletionCertificate
         var recomputed = ComputeFingerprint(template);
 
         // The canonical facts block (if still present) is what the DB cross-check compares against. If it
-        // was stripped, the document hash already won't match, so intact is false regardless.
+        // was stripped, the document hash already won't match, so intact is false regardless. It is stored
+        // HTML-encoded (see BuildHtml) — decode to recover the exact text the fingerprint logic hashes.
         int open = html.IndexOf(CanonicalOpen, StringComparison.Ordinal);
         int close = open < 0 ? -1 : html.IndexOf(CanonicalClose, open, StringComparison.Ordinal);
         string? canonical = open >= 0 && close >= 0
-            ? html[(open + CanonicalOpen.Length)..close].Trim('\r', '\n')
+            ? WebUtility.HtmlDecode(html[(open + CanonicalOpen.Length)..close].Trim('\r', '\n'))
             : null;
         var runId = canonical is null ? null : ParseRunId(canonical);
 
@@ -185,6 +186,9 @@ public static class CompletionCertificate
 
         var sb = new StringBuilder();
         sb.Append("<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n");
+        // Defense in depth: even if markup ever slipped through the encoding, no script, network fetch,
+        // or external resource can run/load from inside a certificate. Only the inline <style> is allowed.
+        sb.Append("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\n");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append($"<title>FileDrift Certificate — {E(r.Id.ToString())}</title>\n");
         sb.Append("<style>\n").Append(Css).Append("\n</style>\n</head>\n");
@@ -254,8 +258,11 @@ public static class CompletionCertificate
           .Append("integrity check, not a cryptographic signature.</p>\n");
         sb.Append("</footer>\n");
 
-        // The exact bytes the fingerprint covers, embedded verbatim for re-checking.
-        sb.Append(CanonicalOpen).Append('\n').Append(canonical).Append('\n').Append(CanonicalClose).Append('\n');
+        // The canonical facts, embedded for re-checking. HTML-ENCODED (Verify decodes after extraction):
+        // a free-text field like the sign-off note could otherwise contain "</script>" and break out of
+        // this block, injecting live markup into the certificate. Encoding also guarantees the first
+        // literal "</script>" after the marker is the real closer when Verify extracts the block.
+        sb.Append(CanonicalOpen).Append('\n').Append(E(canonical)).Append('\n').Append(CanonicalClose).Append('\n');
         sb.Append("</main>\n</body></html>\n");
         return sb.ToString();
     }

@@ -97,4 +97,34 @@ public class CompletionCertificateTests
         var v = CompletionCertificate.Verify("<html><body>not a certificate</body></html>");
         Assert.False(v.Parsed);
     }
+
+    [Fact]
+    public void Hostile_sign_off_note_cannot_inject_markup_and_still_round_trips()
+    {
+        // A note (free text — also importable from a history JSON) must not be able to close the embedded
+        // canonical block and smuggle live markup/script into the certificate.
+        const string hostile = "</script><script>alert('pwned')</script><img src=x onerror=alert(1)>";
+        var run = Run(signed: true);
+        run.SignOffNote = hostile;
+
+        var cert = CompletionCertificate.Generate(run, "1.0.0-test", DateTime.UtcNow);
+
+        Assert.DoesNotContain("<script>alert", cert.Html); // nothing executable made it through
+        Assert.DoesNotContain("<img", cert.Html);
+
+        var v = CompletionCertificate.Verify(cert.Html);
+        Assert.True(v.Intact); // encoding didn't break whole-document verification
+        // The extracted (decoded) canonical still carries the exact original note, so the DB cross-check
+        // (BuildCanonical comparison) keeps working for hostile content too.
+        Assert.Equal(hostile, CompletionCertificate.CanonicalField(v.Canonical!, "signOffNote"));
+        Assert.Equal(v.Canonical, CompletionCertificate.BuildCanonical(run, "1.0.0-test"));
+    }
+
+    [Fact]
+    public void Certificate_carries_a_script_blocking_content_security_policy()
+    {
+        var cert = CompletionCertificate.Generate(Run(), "1.0.0-test", DateTime.UtcNow);
+        Assert.Contains("Content-Security-Policy", cert.Html);
+        Assert.Contains("default-src 'none'", cert.Html);
+    }
 }

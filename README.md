@@ -187,6 +187,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
 
+### 1.0.0-rc10 (2026-07-01)
+
+- **Security review fixes** (from a full-project review ahead of the public release):
+  - **Fixed: HTML injection into certificates via free-text fields.** The machine-readable facts block was embedded in the certificate unencoded, so a sign-off note containing `</script>` — typed at sign-off, or arriving via a history import file — could break out of the data block and inject live markup/script that ran when the certificate was opened. The block is now HTML-encoded on generation and decoded on verification, so hostile content is inert while fingerprinting and the database cross-check behave exactly as before.
+  - **Certificates now carry a Content-Security-Policy** (`default-src 'none'`) as defense in depth: no script, network fetch, or external resource can execute or load from inside a certificate, even if markup ever slipped through.
+  - **Credential hardening:** the plaintext password buffer passed to Windows Credential Manager is zeroed before its memory is released, instead of lingering in freed memory.
+
 ### 1.0.0-rc9 (2026-07-01)
 
 - **History filter, clear, and import/export.**

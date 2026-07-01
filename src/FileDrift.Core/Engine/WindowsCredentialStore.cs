@@ -68,7 +68,14 @@ public sealed class WindowsCredentialStore : ICredentialStore
         {
             Marshal.FreeCoTaskMem(targetPtr);
             Marshal.FreeCoTaskMem(userPtr);
-            if (blobPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(blobPtr);
+            if (blobPtr != IntPtr.Zero)
+            {
+                // Zero the plaintext password copies before releasing them, so they don't linger in
+                // freed memory. (The NetworkCredential's own string is managed and can't be scrubbed.)
+                for (int i = 0; i < blob.Length; i++) Marshal.WriteByte(blobPtr, i, 0);
+                Marshal.FreeCoTaskMem(blobPtr);
+            }
+            Array.Clear(blob);
         }
     }
 
