@@ -258,6 +258,8 @@ public sealed class SqliteRunRepository : IRunRepository
                 conditions.Add("started_at_utc <= $before");
                 AddParam(cmd, "$before", ToIso(before));
             }
+            if (query.SignedOff is { } signedOff)
+                conditions.Add(signedOff ? "signed_off_at_utc IS NOT NULL" : "signed_off_at_utc IS NULL");
         }
 
         var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
@@ -282,6 +284,18 @@ public sealed class SqliteRunRepository : IRunRepository
         AddParam(cmd, "$id", id.ToString());
         int affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
         return affected > 0;
+    }
+
+    public async Task<int> DeleteUnsignedAsync(DateTime? olderThanUtc, CancellationToken cancellationToken = default)
+    {
+        await using var conn = OpenConnection();
+        await using var cmd = conn.CreateCommand();
+        // signed_off_at_utc IS NULL is the hard boundary — a run with a sign-off timestamp is never
+        // matched here, regardless of the age cutoff. <= matches RunQueryOptions.Before's semantics, so a
+        // dry-run count via ListAsync(SignedOff:false, Before:cutoff) always agrees with the real delete.
+        cmd.CommandText = "DELETE FROM runs WHERE signed_off_at_utc IS NULL AND ($cutoff IS NULL OR started_at_utc <= $cutoff);";
+        AddParam(cmd, "$cutoff", ToIsoOrNull(olderThanUtc));
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     // ─────────────────────────── mapping ───────────────────────────

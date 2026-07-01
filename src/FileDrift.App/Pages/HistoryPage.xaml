@@ -6,27 +6,50 @@
     <Grid Margin="24,16,24,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="0,0,0,16">
-            <ui:TextBlock Text="History" FontTypography="Title" VerticalAlignment="Center" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <ui:Button x:Name="SignOffButton" Content="Sign off" Icon="{ui:SymbolIcon Checkmark24}"
-                           Appearance="Primary" Click="OnSignOff"
-                           ToolTip="Record review sign-off for the selected run." />
-                <ui:Button x:Name="CertButton" Content="Export certificate" Icon="{ui:SymbolIcon DocumentRibbon24}"
-                           Margin="8,0,0,0" Click="OnExportCertificate"
-                           ToolTip="Save an HTML certificate of verification for the selected run." />
-                <ui:Button Content="Verify certificate…" Icon="{ui:SymbolIcon DocumentCheckmark24}"
-                           Margin="8,0,0,0" Click="OnVerifyCertificate"
-                           ToolTip="Open a certificate file and check it has not been altered." />
-                <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}" Margin="8,0,0,0" Click="OnRefresh" />
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <ui:TextBlock Text="History" FontTypography="Title" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <ui:TextBlock Text="Show" VerticalAlignment="Center" Margin="0,0,8,0"
+                              Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                <ComboBox x:Name="ShowFilterBox" Width="140" VerticalAlignment="Center"
+                          SelectionChanged="OnShowFilterChanged">
+                    <ComboBoxItem Content="All" IsSelected="True" />
+                    <ComboBoxItem Content="Last 7 days" />
+                    <ComboBoxItem Content="Last 30 days" />
+                    <ComboBoxItem Content="Last 90 days" />
+                </ComboBox>
             </StackPanel>
+            <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowClockwise24}" HorizontalAlignment="Right"
+                       Click="OnRefresh" />
         </Grid>
 
-        <DataGrid x:Name="HistoryGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+            <ui:Button x:Name="SignOffButton" Content="Sign off" Icon="{ui:SymbolIcon Checkmark24}"
+                       Appearance="Primary" Click="OnSignOff" Margin="0,0,8,8"
+                       ToolTip="Record review sign-off for the selected run." />
+            <ui:Button x:Name="CertButton" Content="Export certificate" Icon="{ui:SymbolIcon DocumentRibbon24}"
+                       Margin="0,0,8,8" Click="OnExportCertificate"
+                       ToolTip="Save an HTML certificate of verification for the selected run." />
+            <ui:Button Content="Verify certificate…" Icon="{ui:SymbolIcon DocumentCheckmark24}"
+                       Margin="0,0,8,8" Click="OnVerifyCertificate"
+                       ToolTip="Open a certificate file and check it has not been altered." />
+            <ui:Button Content="Export history…" Icon="{ui:SymbolIcon ArrowExportUp24}"
+                       Margin="0,0,8,8" Click="OnExportHistory"
+                       ToolTip="Save the runs currently shown (per the Show filter above) to a JSON file." />
+            <ui:Button Content="Import history…" Icon="{ui:SymbolIcon ArrowImport24}"
+                       Margin="0,0,8,8" Click="OnImportHistory"
+                       ToolTip="Load runs from a previously exported JSON file. Never overwrites a locally signed-off run." />
+            <ui:Button Content="Clear unsigned…" Icon="{ui:SymbolIcon Delete24}" Appearance="Danger"
+                       Margin="0,0,0,8" Click="OnClearUnsigned"
+                       ToolTip="Permanently delete unsigned runs. Signed-off runs are never affected." />
+        </WrapPanel>
+
+        <DataGrid x:Name="HistoryGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
                   SelectionMode="Single">
             <DataGrid.Columns>
@@ -42,7 +65,7 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <ui:TextBlock x:Name="StatusText" Grid.Row="2" Margin="2,10,0,0"
+        <ui:TextBlock x:Name="StatusText" Grid.Row="3" Margin="2,10,0,0"
                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
     </Grid>
 </Page>

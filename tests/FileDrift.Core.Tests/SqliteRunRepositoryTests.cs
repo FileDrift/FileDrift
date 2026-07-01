@@ -199,4 +199,98 @@ public class SqliteRunRepositoryTests
         Assert.Equal(5, newLoaded!.InaccessibleCount);
         SqliteConnection.ClearAllPools();
     }
+
+    private static RunRecord NewRunAt(DateTime startedAtUtc, bool signedOff = false) => new()
+    {
+        Id = Guid.NewGuid(),
+        StartedAtUtc = startedAtUtc,
+        SourcePath = @"\\srv\share",
+        DestPath = @"C:\Test1",
+        Options = new VerifyOptions(),
+        Status = RunStatus.Completed,
+        CompletedAtUtc = startedAtUtc,
+        MatchedCount = 1,
+        SignedOffAtUtc = signedOff ? DateTime.UtcNow : null,
+        SignedOffBy = signedOff ? "Approver" : null,
+        SignedOffByAccount = signedOff ? @"DOM\op" : null,
+    };
+
+    [Fact]
+    public async Task ListAsync_filters_by_signed_off_state()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var signed = NewRunAt(DateTime.UtcNow, signedOff: true);
+        var unsigned = NewRunAt(DateTime.UtcNow, signedOff: false);
+        await repo.SaveAsync(signed);
+        await repo.SaveAsync(unsigned);
+
+        var signedOnly = await repo.ListAsync(new RunQueryOptions { SignedOff = true });
+        var unsignedOnly = await repo.ListAsync(new RunQueryOptions { SignedOff = false });
+        var both = await repo.ListAsync(new RunQueryOptions { SignedOff = null });
+
+        Assert.Single(signedOnly);
+        Assert.Equal(signed.Id, signedOnly[0].Id);
+        Assert.Single(unsignedOnly);
+        Assert.Equal(unsigned.Id, unsignedOnly[0].Id);
+        Assert.Equal(2, both.Count);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task DeleteUnsignedAsync_never_deletes_signed_off_runs()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var signed = NewRunAt(DateTime.UtcNow.AddDays(-200), signedOff: true);
+        var unsigned = NewRunAt(DateTime.UtcNow.AddDays(-200), signedOff: false);
+        await repo.SaveAsync(signed);
+        await repo.SaveAsync(unsigned);
+
+        int deleted = await repo.DeleteUnsignedAsync(olderThanUtc: null); // no age limit — would delete everything unsigned
+
+        Assert.Equal(1, deleted);
+        Assert.NotNull(await repo.GetAsync(signed.Id));  // protected regardless of age
+        Assert.Null(await repo.GetAsync(unsigned.Id));   // removed
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task DeleteUnsignedAsync_honors_age_cutoff()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var old = NewRunAt(DateTime.UtcNow.AddDays(-100));
+        var recent = NewRunAt(DateTime.UtcNow.AddDays(-1));
+        await repo.SaveAsync(old);
+        await repo.SaveAsync(recent);
+
+        int deleted = await repo.DeleteUnsignedAsync(olderThanUtc: DateTime.UtcNow.AddDays(-30));
+
+        Assert.Equal(1, deleted);
+        Assert.Null(await repo.GetAsync(old.Id));      // older than cutoff — removed
+        Assert.NotNull(await repo.GetAsync(recent.Id)); // within cutoff — kept
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task DeleteUnsignedAsync_dry_run_count_matches_actual_delete()
+    {
+        // ListAsync(SignedOff:false, Before:cutoff) is how the CLI's dry-run counts what WOULD be deleted;
+        // it must agree exactly with what DeleteUnsignedAsync actually removes for the same cutoff.
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var cutoff = DateTime.UtcNow.AddDays(-30);
+        await repo.SaveAsync(NewRunAt(cutoff.AddDays(-1)));           // older — matches
+        await repo.SaveAsync(NewRunAt(cutoff));                       // exactly at cutoff — matches (<=)
+        await repo.SaveAsync(NewRunAt(cutoff.AddDays(1)));            // newer — doesn't match
+        await repo.SaveAsync(NewRunAt(cutoff.AddDays(-1), signedOff: true)); // old but signed off — never matches
+
+        var dryRun = await repo.ListAsync(new RunQueryOptions { SignedOff = false, Before = cutoff });
+        int deleted = await repo.DeleteUnsignedAsync(cutoff);
+
+        Assert.Equal(2, dryRun.Count);
+        Assert.Equal(dryRun.Count, deleted);
+        SqliteConnection.ClearAllPools();
+    }
 }

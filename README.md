@@ -54,7 +54,10 @@ FileDrift-CLI report    --id <run-id>
 FileDrift-CLI signoff   --id <run-id> [--by "Approver Name"] [--note "..."] [--force]
 FileDrift-CLI certificate --id <run-id> [--out file|dir]   # generate an HTML certificate
 FileDrift-CLI certificate --verify <file>                  # re-check a certificate's integrity
-FileDrift-CLI history   [--last 10] [--src \\server\share]
+FileDrift-CLI history   [--last 10] [--src \\server\share] [--since 30d] [--signed-off true|false]
+FileDrift-CLI history export --out history.json [--since 90d] [--src ...] [--dst ...]
+FileDrift-CLI history import --in history.json [--overwrite]
+FileDrift-CLI history prune [--older-than 90d] [--yes]     # dry-run without --yes
 ```
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
@@ -124,6 +127,14 @@ The Windows account that actually performed the sign-off is **always captured an
 
 You can export a self-contained **HTML certificate** for any completed run — from the main **Verify** page (the *Sign off* and *Export certificate* buttons on the right of the live-refresh bar act on the run that just completed), from the **History** page (*Export certificate* for any past run), or via `FileDrift-CLI certificate --id <run-id>`. The **Compliance** tab is the home for checking certificates: *Verify certificate…* checks a single file, and *Verify folder…* re-checks every `.html` certificate under a folder (recursively) and lists the results altered-first — handy for auditing an archive of filed certificates. (The History page has the single-file *Verify certificate…* too, for convenience.) Both are the GUI equivalent of `certificate --verify`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
 
+### Filtering, clearing, and moving history
+
+The **History** page has a **Show** filter (All / Last 7 / 30 / 90 days) that scopes both the grid and the *Export history…* button; the CLI equivalent is `FileDrift-CLI history --since 30d`. Filter by sign-off state at the CLI with `--signed-off true|false`.
+
+**Clearing history is restricted to unsigned runs, by design.** A signed-off run is a record that someone attested to — deleting it would also orphan any certificate that references it — so neither the GUI's *Clear unsigned…* button nor `FileDrift-CLI history prune` can ever remove one. *Clear unsigned…* lets you pick a scope (all unsigned, or older than 7/30/90 days), shows how many runs match before you commit, and requires confirmation. `history prune [--older-than 90d]` without `--yes` only reports what *would* be deleted; add `--yes` to actually delete.
+
+**Export and import move history between machines or into an archive.** *Export history…* (History page) or `FileDrift-CLI history export --out file.json` writes every field of the matching runs — including sign-off — to a JSON file. *Import history…* or `FileDrift-CLI history import --in file.json [--overwrite]` reads it back in: without `--overwrite`, a run whose ID already exists locally is left untouched; with `--overwrite`, existing runs are updated, **except a locally signed-off run is never overwritten** by an import, protecting its audit trail the same way pruning does. This is a portability convenience, not a security control — the underlying SQLite file isn't itself tamper-proof, so treat an imported history file with the same trust you'd give any other admin export.
+
 Each certificate carries a **SHA-256 integrity fingerprint that covers the entire document** (the fingerprint is blanked to a placeholder while hashing, then substituted in). `FileDrift-CLI certificate --verify <file>` reverses that and re-hashes the whole file, so **any** later edit — a visible number, the watermark, or the embedded facts — flips the result to *altered*. When the run still exists in the local history database, verify additionally reports whether the certificate's embedded facts still match that system of record (`matchesDatabase`). This makes tampering *detectable*; it is an integrity check, **not** a cryptographic signature (Authenticode file signing is on the post-1.0 backlog). A run that has not been signed off is stamped with a diagonal **"NOT SIGNED OFF" watermark laid over the certificate body** — not just the page margin — so an unattested certificate can't be mistaken for an approved one. The layout is sized to print on a single Letter or A4 page.
 
 > Cryptographic (Authenticode) signing of certificates and a native PDF export are on the post-1.0 backlog.
@@ -165,6 +176,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc9 (2026-07-01)
+
+- **History filter, clear, and import/export.**
+  - **Filter by age.** History page gets a *Show* dropdown (All / 7 / 30 / 90 days), scoping the grid and *Export history…*. CLI: `history --since 30d` and `--signed-off true|false`.
+  - **Clear unsigned runs.** *Clear unsigned…* (History page) and `FileDrift-CLI history prune [--older-than 90d] [--yes]` permanently delete unsigned run history. **Signed-off runs are never deletable this way** — a hard rule, not a default, since removing one would also orphan any certificate that references it. The GUI shows the matching count before you confirm; the CLI defaults to a dry run and requires `--yes` to actually delete.
+  - **Export/import history.** *Export history…* / `history export --out file.json` writes every field (including sign-off) of the matching runs to JSON. *Import history…* / `history import --in file.json [--overwrite]` reads it back: by default a run that already exists locally is left alone; with `--overwrite`, existing runs are updated **except a locally signed-off run, which an import can never overwrite** — the same protection pruning has. This is a portability convenience, not a security boundary, since the underlying database isn't itself tamper-proof.
 
 ### 1.0.0-rc8 (2026-06-29)
 

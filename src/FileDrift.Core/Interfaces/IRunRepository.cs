@@ -29,4 +29,10 @@ public interface IRunRepository
 
     /// <summary>Permanently deletes a run record. Returns true if it existed.</summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Permanently deletes every UNSIGNED run (optionally restricted to those started before
+    /// <paramref name="olderThanUtc"/>). Signed-off runs are never touched by this method, by design — the
+    /// only way to remove a signed-off run is <see cref="DeleteAsync"/> on its specific ID. Returns the
+    /// number of rows deleted.</summary>
+    Task<int> DeleteUnsignedAsync(DateTime? olderThanUtc, CancellationToken cancellationToken = default);
 }
