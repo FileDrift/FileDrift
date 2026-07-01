@@ -18,6 +18,16 @@ It can also copy source→destination to reconcile differences it finds, which i
 - **Post-migration sign-off** — produce a signed report showing zero drift between source and destination
 - **Ongoing drift detection** — scheduled or ad-hoc comparison of two shares to catch unexpected changes
 
+## Roadmap
+
+Current version: **1.0.0-rc9** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+
+**Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
+
+**Remaining before 1.0:** a security review of the pending changes, then cutting an actual public release (signing via an internal CA now, SignPath Foundation pending approval for public-trust signing).
+
+**Post-1.0 (deliberately deferred):** certificate PDF export and Authenticode-signing the certificate file itself (today's SHA-256 fingerprint detects tampering but isn't a cryptographic signature); object storage and SharePoint/OneDrive targets (a real feature requiring a write abstraction, not a small addition).
+
 ## Requirements
 
 - Windows 10/11 or Windows Server 2016+
