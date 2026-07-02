@@ -46,4 +46,21 @@ public sealed class RunRecord
         !string.Equals(SignedOffBy, SignedOffByAccount, StringComparison.OrdinalIgnoreCase);
 
     public long TotalDifferences => DifferentCount + MissingAtDestCount + ExtraAtDestCount;
+
+    /// <summary>UTC timestamp of the most recent reconcile executed against this run's differences;
+    /// null if they have never been reconciled.</summary>
+    public DateTime? ReconciledAtUtc { get; set; }
+
+    /// <summary>Total bytes written to the destination by that reconcile.</summary>
+    public long ReconcileBytesCopied { get; set; }
+
+    /// <summary>Files newly created on the destination by that reconcile.</summary>
+    public long ReconcileFilesCopied { get; set; }
+
+    /// <summary>Files overwritten on the destination by that reconcile.</summary>
+    public long ReconcileFilesOverwritten { get; set; }
+
+    /// <summary>True if that reconcile was stopped (cancelled) before finishing — the totals above
+    /// reflect only what completed, not the full plan.</summary>
+    public bool ReconcileStopped { get; set; }
 }

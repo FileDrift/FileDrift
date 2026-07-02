@@ -274,6 +274,110 @@ public class SqliteRunRepositoryTests
     }
 
     [Fact]
+    public async Task Roundtrips_reconcile_summary()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var run = NewRun(0);
+        await repo.SaveAsync(run);
+
+        run.ReconciledAtUtc = DateTime.UtcNow;
+        run.ReconcileBytesCopied = 123_456_789_012;
+        run.ReconcileFilesCopied = 42;
+        run.ReconcileFilesOverwritten = 7;
+        run.ReconcileStopped = true;
+        await repo.SaveAsync(run);
+
+        var loaded = await repo.GetAsync(run.Id);
+        Assert.NotNull(loaded);
+        Assert.NotNull(loaded!.ReconciledAtUtc);
+        Assert.Equal(123_456_789_012, loaded.ReconcileBytesCopied);
+        Assert.Equal(42, loaded.ReconcileFilesCopied);
+        Assert.Equal(7, loaded.ReconcileFilesOverwritten);
+        Assert.True(loaded.ReconcileStopped);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task Unreconciled_run_defaults_reconcile_fields_to_empty()
+    {
+        using var t = new TempDir();
+        var repo = new SqliteRunRepository(t.Sub("s.db"));
+        var run = NewRun(0);
+        await repo.SaveAsync(run);
+
+        var loaded = await repo.GetAsync(run.Id);
+        Assert.Null(loaded!.ReconciledAtUtc);
+        Assert.Equal(0, loaded.ReconcileBytesCopied);
+        Assert.False(loaded.ReconcileStopped);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task Migrates_v3_database_adding_reconcile_columns()
+    {
+        using var t = new TempDir();
+
+        var seed = new SqliteRunRepository(t.Sub("seed.db"));
+        await seed.SaveAsync(NewRun(0));
+        string optionsJson;
+        using (var c = new SqliteConnection($"Data Source={t.Sub("seed.db")}"))
+        {
+            c.Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "SELECT options_json FROM runs LIMIT 1;";
+            optionsJson = (string)cmd.ExecuteScalar()!;
+        }
+
+        // Hand-build a v3 database: runs table has signed_off_by/account but no reconcile_* columns.
+        var path = t.Sub("v3.db");
+        var oldId = Guid.NewGuid();
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            void E(string sql) { using var c = conn.CreateCommand(); c.CommandText = sql; c.ExecuteNonQuery(); }
+            E("CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (3);");
+            E("""
+                CREATE TABLE runs (
+                    id TEXT PRIMARY KEY, started_at_utc TEXT NOT NULL, source_path TEXT NOT NULL,
+                    dest_path TEXT NOT NULL, options_json TEXT NOT NULL, completed_at_utc TEXT NULL,
+                    status TEXT NOT NULL, total_source_files INTEGER NOT NULL, total_dest_files INTEGER NOT NULL,
+                    matched_count INTEGER NOT NULL, different_count INTEGER NOT NULL,
+                    missing_at_dest_count INTEGER NOT NULL, extra_at_dest_count INTEGER NOT NULL,
+                    sign_off_note TEXT NULL, signed_off_at_utc TEXT NULL,
+                    inaccessible_count INTEGER NOT NULL DEFAULT 0,
+                    signed_off_by TEXT NULL, signed_off_by_account TEXT NULL);
+                """);
+            using var ins = conn.CreateCommand();
+            ins.CommandText =
+                "INSERT INTO runs VALUES ($id,$s,$src,$dst,$o,$c,'Completed',0,0,4,0,0,0,NULL,NULL,0,NULL,NULL);";
+            ins.Parameters.AddWithValue("$id", oldId.ToString());
+            ins.Parameters.AddWithValue("$s", DateTime.UtcNow.ToString("O"));
+            ins.Parameters.AddWithValue("$src", @"\\srv\old");
+            ins.Parameters.AddWithValue("$dst", @"C:\Old");
+            ins.Parameters.AddWithValue("$o", optionsJson);
+            ins.Parameters.AddWithValue("$c", DateTime.UtcNow.ToString("O"));
+            ins.ExecuteNonQuery();
+        }
+
+        // Opening with the current repo triggers the v3->v4 migration (five ADD COLUMNs).
+        var repo = new SqliteRunRepository(path);
+        var oldRun = await repo.GetAsync(oldId);
+        Assert.NotNull(oldRun);
+        Assert.Null(oldRun!.ReconciledAtUtc);      // new columns default null/0 on the existing row
+        Assert.Equal(0, oldRun.ReconcileBytesCopied);
+        Assert.False(oldRun.ReconcileStopped);
+        Assert.Equal(4, oldRun.MatchedCount);      // existing data preserved
+
+        oldRun.ReconciledAtUtc = DateTime.UtcNow;
+        oldRun.ReconcileBytesCopied = 999;
+        await repo.SaveAsync(oldRun); // write path works post-migration
+        var updated = await repo.GetAsync(oldId);
+        Assert.Equal(999, updated!.ReconcileBytesCopied);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task DeleteUnsignedAsync_dry_run_count_matches_actual_delete()
     {
         // ListAsync(SignedOff:false, Before:cutoff) is how the CLI's dry-run counts what WOULD be deleted;

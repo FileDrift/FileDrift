@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc17** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc18** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -135,7 +135,7 @@ The Windows account that actually performed the sign-off is **always captured an
 
 ### Certificate of verification
 
-You can export a self-contained **HTML certificate** for any completed run — from the main **Verify** page (the *Sign off* and *Export certificate* buttons on the right of the live-refresh bar act on the run that just completed), from the **History** page (*Export certificate* for any past run), or via `FileDrift-CLI certificate --id <run-id>`. The **Compliance** tab is the home for checking certificates: *Verify certificate…* checks a single file, and *Verify folder…* re-checks every `.html` certificate under a folder (recursively) and lists the results altered-first — handy for auditing an archive of filed certificates. (The History page has the single-file *Verify certificate…* too, for convenience.) Both are the GUI equivalent of `certificate --verify`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, and the sign-off block, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
+You can export a self-contained **HTML certificate** for any completed run — from the main **Verify** page (the *Sign off* and *Export certificate* buttons on the right of the live-refresh bar act on the run that just completed), from the **History** page (*Export certificate* for any past run), or via `FileDrift-CLI certificate --id <run-id>`. The **Compliance** tab is the home for checking certificates: *Verify certificate…* checks a single file, and *Verify folder…* re-checks every `.html` certificate under a folder (recursively) and lists the results altered-first — handy for auditing an archive of filed certificates. (The History page has the single-file *Verify certificate…* too, for convenience.) Both are the GUI equivalent of `certificate --verify`. It records the run's result verdict (MATCH / DIFFERENCES FOUND / INCOMPLETE), the options it ran with, the file counts, the sign-off block, and — if the run's differences were reconciled — a Reconcile section with the total data copied and file counts, and is styled to print cleanly (use the browser's *Print → Save as PDF*).
 
 ### Filtering, clearing, and moving history
 
@@ -186,6 +186,11 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc18 (2026-07-02)
+
+- **Certificates now show total data copied for a reconciled run.** When a run's differences were later reconciled, its certificate gains a **Reconcile** section — reconciled time, data copied (formatted as B/KB/MB/GB/TB as appropriate), files copied, and files overwritten — right below the verification facts. If the reconcile was stopped before finishing, the certificate says so, since the totals then only reflect what completed. Unreconciled runs are unaffected; the section simply doesn't appear.
+- This required persisting the reconcile outcome for the first time: the run history database gains four columns (reconciled time, bytes copied, files copied/overwritten, stopped flag), written by both the GUI and `FileDrift-CLI reconcile`. `FileDrift-CLI report` also gains a `reconcile` block reflecting the same data.
 
 ### 1.0.0-rc17 (2026-07-02)
 

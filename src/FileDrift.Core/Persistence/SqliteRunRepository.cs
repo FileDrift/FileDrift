@@ -9,7 +9,7 @@ namespace FileDrift.Core.Persistence;
 /// <summary>SQLite-backed run history. Creates and migrates its schema on construction.</summary>
 public sealed class SqliteRunRepository : IRunRepository
 {
-    private const int TargetSchemaVersion = 3;
+    private const int TargetSchemaVersion = 4;
 
     private readonly string _connectionString;
 
@@ -60,6 +60,8 @@ public sealed class SqliteRunRepository : IRunRepository
             ApplyMigration2(conn, tx);
         if (current < 3)
             ApplyMigration3(conn, tx);
+        if (current < 4)
+            ApplyMigration4(conn, tx);
 
         if (current < TargetSchemaVersion)
         {
@@ -118,6 +120,15 @@ public sealed class SqliteRunRepository : IRunRepository
         Execute(conn, tx, "ALTER TABLE runs ADD COLUMN signed_off_by_account TEXT NULL;");
     }
 
+    private static void ApplyMigration4(SqliteConnection conn, SqliteTransaction tx)
+    {
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconciled_at_utc TEXT NULL;");
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconcile_bytes_copied INTEGER NOT NULL DEFAULT 0;");
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconcile_files_copied INTEGER NOT NULL DEFAULT 0;");
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconcile_files_overwritten INTEGER NOT NULL DEFAULT 0;");
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconcile_stopped INTEGER NOT NULL DEFAULT 0;");
+    }
+
     private static void Execute(SqliteConnection conn, SqliteTransaction tx, string sql)
     {
         using var cmd = conn.CreateCommand();
@@ -138,13 +149,16 @@ public sealed class SqliteRunRepository : IRunRepository
                 completed_at_utc, status, total_source_files, total_dest_files,
                 matched_count, different_count, missing_at_dest_count, extra_at_dest_count,
                 sign_off_note, signed_off_at_utc, inaccessible_count,
-                signed_off_by, signed_off_by_account)
+                signed_off_by, signed_off_by_account,
+                reconciled_at_utc, reconcile_bytes_copied, reconcile_files_copied,
+                reconcile_files_overwritten, reconcile_stopped)
             VALUES (
                 $id, $started, $src, $dst, $options,
                 $completed, $status, $totalSrc, $totalDst,
                 $matched, $different, $missing, $extra,
                 $note, $signedOff, $inaccessible,
-                $signedBy, $signedByAccount)
+                $signedBy, $signedByAccount,
+                $reconciledAt, $reconBytes, $reconFilesCopied, $reconFilesOverwritten, $reconStopped)
             ON CONFLICT(id) DO UPDATE SET
                 started_at_utc        = excluded.started_at_utc,
                 source_path           = excluded.source_path,
@@ -162,7 +176,12 @@ public sealed class SqliteRunRepository : IRunRepository
                 signed_off_at_utc     = excluded.signed_off_at_utc,
                 inaccessible_count    = excluded.inaccessible_count,
                 signed_off_by         = excluded.signed_off_by,
-                signed_off_by_account = excluded.signed_off_by_account;
+                signed_off_by_account = excluded.signed_off_by_account,
+                reconciled_at_utc     = excluded.reconciled_at_utc,
+                reconcile_bytes_copied      = excluded.reconcile_bytes_copied,
+                reconcile_files_copied      = excluded.reconcile_files_copied,
+                reconcile_files_overwritten = excluded.reconcile_files_overwritten,
+                reconcile_stopped           = excluded.reconcile_stopped;
             """;
 
         AddParam(cmd, "$id",        run.Id.ToString());
@@ -183,6 +202,11 @@ public sealed class SqliteRunRepository : IRunRepository
         AddParam(cmd, "$inaccessible", run.InaccessibleCount);
         AddParam(cmd, "$signedBy",        run.SignedOffBy);
         AddParam(cmd, "$signedByAccount", run.SignedOffByAccount);
+        AddParam(cmd, "$reconciledAt",          ToIsoOrNull(run.ReconciledAtUtc));
+        AddParam(cmd, "$reconBytes",            run.ReconcileBytesCopied);
+        AddParam(cmd, "$reconFilesCopied",      run.ReconcileFilesCopied);
+        AddParam(cmd, "$reconFilesOverwritten", run.ReconcileFilesOverwritten);
+        AddParam(cmd, "$reconStopped",          run.ReconcileStopped ? 1 : 0);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -305,7 +329,9 @@ public sealed class SqliteRunRepository : IRunRepository
         "completed_at_utc, status, total_source_files, total_dest_files, " +
         "matched_count, different_count, missing_at_dest_count, extra_at_dest_count, " +
         "sign_off_note, signed_off_at_utc, inaccessible_count, " +
-        "signed_off_by, signed_off_by_account";
+        "signed_off_by, signed_off_by_account, " +
+        "reconciled_at_utc, reconcile_bytes_copied, reconcile_files_copied, " +
+        "reconcile_files_overwritten, reconcile_stopped";
 
     private static RunRecord Map(SqliteDataReader r)
     {
@@ -329,6 +355,11 @@ public sealed class SqliteRunRepository : IRunRepository
             InaccessibleCount  = r.GetInt64(15),
             SignedOffBy        = r.IsDBNull(16) ? null : r.GetString(16),
             SignedOffByAccount = r.IsDBNull(17) ? null : r.GetString(17),
+            ReconciledAtUtc          = r.IsDBNull(18) ? null : FromIso(r.GetString(18)),
+            ReconcileBytesCopied     = r.GetInt64(19),
+            ReconcileFilesCopied     = r.GetInt64(20),
+            ReconcileFilesOverwritten = r.GetInt64(21),
+            ReconcileStopped         = r.GetInt64(22) != 0,
         };
     }
 

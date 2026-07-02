@@ -60,6 +60,14 @@ internal static class ReportCommand
                         delegated = run.SignOffWasDelegated,
                         note = run.SignOffNote,
                     },
+                    reconcile = run.ReconciledAtUtc is null ? null : new
+                    {
+                        reconciledAtUtc = run.ReconciledAtUtc,
+                        bytesCopied = run.ReconcileBytesCopied,
+                        filesCopied = run.ReconcileFilesCopied,
+                        filesOverwritten = run.ReconcileFilesOverwritten,
+                        stopped = run.ReconcileStopped,
+                    },
                 });
 
                 return 0;

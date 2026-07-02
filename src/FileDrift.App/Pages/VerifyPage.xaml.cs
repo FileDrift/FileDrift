@@ -940,6 +940,19 @@ public partial class VerifyPage : Page
             foreach (var f in result.Failures)
                 AppendLog($"[FAILED] {f.RelativePath} – {f.Error}");
 
+            // Record what this reconcile did on the verify run it was based on, so a certificate for
+            // that run can show it (e.g. total data copied) even after the destination has moved on.
+            if (_lastRun is { } reconciledRun)
+            {
+                reconciledRun.ReconciledAtUtc = DateTime.UtcNow;
+                reconciledRun.ReconcileBytesCopied = result.BytesCopied;
+                reconciledRun.ReconcileFilesCopied = result.Copied;
+                reconciledRun.ReconcileFilesOverwritten = result.Overwritten;
+                reconciledRun.ReconcileStopped = result.Stopped;
+                try { await _repository.SaveAsync(reconciledRun); }
+                catch { /* best-effort — the reconcile itself already succeeded or failed independently */ }
+            }
+
             // Destination changed; require a fresh verify before reconciling again.
             _lastDiffs = null;
             _lastRun = null;

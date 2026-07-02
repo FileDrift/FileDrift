@@ -96,6 +96,15 @@ internal static class ReconcileCommand
                 var result = await CliServices.Reconcile().ExecuteAsync(
                     plan, srcVal, dstVal, sourceCred, destCred, progress: null, hardCancel: ct);
 
+                // Record what this reconcile did on the verify run it was based on, so a certificate
+                // for that run can show it (e.g. total data copied) even after the destination has moved on.
+                verify.Run.ReconciledAtUtc = DateTime.UtcNow;
+                verify.Run.ReconcileBytesCopied = result.BytesCopied;
+                verify.Run.ReconcileFilesCopied = result.Copied;
+                verify.Run.ReconcileFilesOverwritten = result.Overwritten;
+                verify.Run.ReconcileStopped = result.Stopped;
+                await CliServices.Repository().SaveAsync(verify.Run, ct);
+
                 CliOutput.Write(new
                 {
                     verb = "reconcile",
