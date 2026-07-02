@@ -62,14 +62,31 @@ internal static class ComplianceActions
             run.SignedOffBy = by;
             run.SignedOffByAccount = account;
             run.SignOffNote = note;
-            return string.Equals(by, account, StringComparison.OrdinalIgnoreCase)
+            var status = string.Equals(by, account, StringComparison.OrdinalIgnoreCase)
                 ? $"Signed off by {by}."
                 : $"Signed off as {by} (operated by {account}).";
+
+            // Offer to view it right away — no save dialog, no separate verify step, just render and open.
+            // "Export certificate" remains the way to keep a permanent copy.
+            if (await Dialogs.ConfirmAsync("Signed off", "View the certificate now?", confirmText: "View"))
+                await ViewCertificateAsync(run);
+
+            return status;
         }
         catch (Exception ex)
         {
             return $"Sign-off failed: {ex.Message}";
         }
+    }
+
+    /// <summary>Renders a run's certificate to a temp file and opens it, purely for a quick look — no
+    /// save-location prompt. "Export certificate" is the way to keep a permanent copy.</summary>
+    private static async Task ViewCertificateAsync(RunRecord run)
+    {
+        var cert = CompletionCertificate.Generate(run, AppInfo.Version, DateTime.UtcNow);
+        var path = Path.Combine(Path.GetTempPath(), $"FileDrift-Certificate-{run.Id.ToString()[..8]}.html");
+        await File.WriteAllTextAsync(path, cert.Html);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
     }
 
     public static async Task<string?> ExportCertificateAsync(RunRecord run)

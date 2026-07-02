@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc19** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc20** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -128,7 +128,7 @@ Every run is stored in a local SQLite database (`%APPDATA%\FileDrift\history.db`
 
 Once you've reviewed a run's results, you can **sign it off** to record that a named party accepts them:
 
-- **In the app** — open History, select the run, and click **Sign off**. The dialog pre-fills the accountable party with the Windows account you're running under; you can change it (e.g. to sign on behalf of a named approver) and add an optional note. The History page then shows the sign-off time and party.
+- **In the app** — open History, select the run, and click **Sign off**. The dialog pre-fills the accountable party with the Windows account you're running under; you can change it (e.g. to sign on behalf of a named approver) and add an optional note. The History page then shows the sign-off time and party. Once signed off, you can view the certificate immediately — no separate export needed.
 - **At the CLI** — `FileDrift-CLI signoff --id <run-id> [--by "Approver Name"] [--note "..."]`. Without `--by`, the current Windows account is recorded as the approver. Re-signing an already-signed run requires `--force`.
 
 The Windows account that actually performed the sign-off is **always captured and stored separately** from the editable "signed off by" name, so overriding the approver never erases who operated the tool. When the two differ, the run is flagged as a delegated sign-off. `FileDrift-CLI report --id <run-id>` prints the full sign-off block (time, approver, operating account, delegated flag, note).
@@ -186,6 +186,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc20 (2026-07-02)
+
+- **Sign off now offers to view the certificate immediately.** Previously the only way to see what a run's certificate looks like was to export it (choosing a save location) and open it separately — there was no quick "just show me" path. After a successful sign-off, choosing *View* now renders the certificate to a temp file and opens it right away, with no save dialog and no separate verify step. *Export certificate* is still the way to keep a permanent copy.
 
 ### 1.0.0-rc19 (2026-07-02)
 
