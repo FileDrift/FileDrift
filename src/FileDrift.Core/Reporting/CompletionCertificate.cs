@@ -133,12 +133,10 @@ public static class CompletionCertificate
         Line("signedOffBy", run.SignedOffBy);
         Line("signedOffByAccount", run.SignedOffByAccount);
         Line("signOffNote", run.SignOffNote);
-        Line("reconciled", run.ReconciledAtUtc is not null ? "true" : "false");
-        Line("reconciledAtUtc", IsoOrNull(run.ReconciledAtUtc));
-        Line("reconcileBytesCopied", run.ReconcileBytesCopied.ToString(CultureInfo.InvariantCulture));
-        Line("reconcileFilesCopied", run.ReconcileFilesCopied.ToString(CultureInfo.InvariantCulture));
-        Line("reconcileFilesOverwritten", run.ReconcileFilesOverwritten.ToString(CultureInfo.InvariantCulture));
-        Line("reconcileStopped", run.ReconcileStopped ? "true" : "false");
+        // Deliberately NOT included: reconcile facts (ReconciledAtUtc/bytes/files copied). The certificate
+        // attests to what a VERIFY found under the stated criteria — reconcile is a tool used to get the
+        // destination into a matching state, not itself something this document certifies. That data
+        // remains available via `report`/History for operational purposes.
         return sb.ToString().TrimEnd('\n');
     }
 
@@ -234,17 +232,8 @@ public static class CompletionCertificate
         Row(sb, "Inaccessible (skipped)", r.InaccessibleCount.ToString("N0", CultureInfo.InvariantCulture));
         sb.Append("</table>\n");
 
-        if (r.ReconciledAtUtc is not null)
-        {
-            sb.Append("<section class=\"reconcile\">\n<h2>Reconcile</h2>\n<table class=\"facts\">\n");
-            Row(sb, "Reconciled (UTC)", IsoOrNull(r.ReconciledAtUtc) ?? "");
-            Row(sb, "Data copied", FormatBytes(r.ReconcileBytesCopied));
-            Row(sb, "Files copied", r.ReconcileFilesCopied.ToString("N0", CultureInfo.InvariantCulture));
-            Row(sb, "Files overwritten", r.ReconcileFilesOverwritten.ToString("N0", CultureInfo.InvariantCulture));
-            if (r.ReconcileStopped)
-                Row(sb, "Note", "Stopped before finishing — totals reflect only what completed.");
-            sb.Append("</table>\n</section>\n");
-        }
+        // No Reconcile section here by design: this certificate attests to what a verify found, not to
+        // what a reconcile subsequently did. Reconcile facts remain available via `report`/History.
 
         sb.Append("<section class=\"signoff\">\n<h2>Sign-off</h2>\n");
         if (signed)
@@ -297,15 +286,6 @@ public static class CompletionCertificate
         return string.Concat(Enumerable.Repeat(span, 120));
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double size = bytes;
-        int unit = 0;
-        while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
-        return unit == 0 ? $"{bytes} B" : $"{size:0.#} {units[unit]}";
-    }
-
     private static string E(string s) => WebUtility.HtmlEncode(s);
 
     private static string Iso(DateTime utc) =>
@@ -336,7 +316,7 @@ public static class CompletionCertificate
         table.facts th { text-align:left; width:190px; padding:4px 12px 4px 0; color:var(--muted); font-weight:600;
                          vertical-align:top; border-bottom:1px solid #eee; }
         table.facts td { padding:4px 0; vertical-align:top; word-break:break-all; border-bottom:1px solid #eee; }
-        section.signoff, section.reconcile { margin-top:14px; }
+        section.signoff { margin-top:14px; }
         h2 { font-size:15px; border-bottom:1px solid var(--line); padding-bottom:5px; margin:0 0 8px; }
         .unsigned-note { font-size:12.5px; color:var(--bad); background:#fbeaec; border:1px solid var(--bad);
                          border-radius:6px; padding:9px 13px; }

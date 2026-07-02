@@ -129,73 +129,26 @@ public class CompletionCertificateTests
     }
 
     [Fact]
-    public void Unreconciled_run_shows_no_reconcile_section()
+    public void Certificate_never_mentions_reconcile_facts_even_when_the_run_has_them()
     {
-        var cert = CompletionCertificate.Generate(Run(), "1.0.0-test", DateTime.UtcNow);
-        Assert.DoesNotContain("class=\"reconcile\"", cert.Html);
-        Assert.DoesNotContain("Data copied", cert.Html);
-    }
-
-    [Fact]
-    public void Reconciled_run_shows_data_copied_in_GB()
-    {
+        // The certificate attests to what a verify found, not to what a reconcile subsequently did — even
+        // when a run genuinely has reconcile data (persisted for report/History), none of it should leak
+        // into the certificate or its fingerprinted canonical facts.
         var run = Run();
         run.ReconciledAtUtc = new DateTime(2026, 6, 29, 14, 0, 0, DateTimeKind.Utc);
-        run.ReconcileBytesCopied = 5L * 1024 * 1024 * 1024; // exactly 5 GB
+        run.ReconcileBytesCopied = 5L * 1024 * 1024 * 1024;
         run.ReconcileFilesCopied = 79;
         run.ReconcileFilesOverwritten = 3;
-
-        var cert = CompletionCertificate.Generate(run, "1.0.0-test", DateTime.UtcNow);
-
-        Assert.Contains("class=\"reconcile\"", cert.Html);
-        Assert.Contains("5 GB", cert.Html);
-        Assert.Contains(">79<", cert.Html);
-        Assert.DoesNotContain("Stopped before finishing", cert.Html); // completed cleanly
-    }
-
-    [Fact]
-    public void Reconciled_run_formats_small_and_large_byte_counts_appropriately()
-    {
-        var small = Run();
-        small.ReconciledAtUtc = DateTime.UtcNow;
-        small.ReconcileBytesCopied = 500; // under 1 KB threshold
-        Assert.Contains("500 B", CompletionCertificate.Generate(small, "v", DateTime.UtcNow).Html);
-
-        var large = Run();
-        large.ReconciledAtUtc = DateTime.UtcNow;
-        large.ReconcileBytesCopied = 3L * 1024 * 1024 * 1024 * 1024; // 3 TB
-        Assert.Contains("3 TB", CompletionCertificate.Generate(large, "v", DateTime.UtcNow).Html);
-    }
-
-    [Fact]
-    public void Stopped_reconcile_is_flagged_on_the_certificate()
-    {
-        var run = Run();
-        run.ReconciledAtUtc = DateTime.UtcNow;
-        run.ReconcileBytesCopied = 1024;
         run.ReconcileStopped = true;
 
         var cert = CompletionCertificate.Generate(run, "1.0.0-test", DateTime.UtcNow);
-        Assert.Contains("Stopped before finishing", cert.Html);
-    }
 
-    [Fact]
-    public void Reconcile_fields_round_trip_through_canonical_and_verify()
-    {
-        var run = Run();
-        run.ReconciledAtUtc = new DateTime(2026, 6, 29, 15, 0, 0, DateTimeKind.Utc);
-        run.ReconcileBytesCopied = 123_456;
-        run.ReconcileFilesCopied = 10;
-        run.ReconcileFilesOverwritten = 2;
-        run.ReconcileStopped = true;
+        Assert.DoesNotContain("reconcile", cert.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Data copied", cert.Html);
+        Assert.DoesNotContain("reconcile", cert.Canonical, StringComparison.OrdinalIgnoreCase);
 
-        var cert = CompletionCertificate.Generate(run, "1.0.0-test", DateTime.UtcNow);
         var v = CompletionCertificate.Verify(cert.Html);
-
         Assert.True(v.Intact);
-        Assert.Equal("123456", CompletionCertificate.CanonicalField(v.Canonical!, "reconcileBytesCopied"));
-        Assert.Equal("true", CompletionCertificate.CanonicalField(v.Canonical!, "reconcileStopped"));
-        // Cross-checking against the authoritative record must also agree (same as the DB cross-check path).
         Assert.Equal(v.Canonical, CompletionCertificate.BuildCanonical(run, "1.0.0-test"));
     }
 }

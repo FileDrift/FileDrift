@@ -36,14 +36,6 @@ public partial class VerifyPage : Page
     // SDDL — doesn't pin multiple GB of matched data in memory after the run.
     private List<ComparisonResult>? _lastDiffs;
     private RunRecord? _lastRun;
-
-    // Sign off / Export certificate document a historical fact about a run (what it found, and — once
-    // reconciled — what the reconcile did); unlike Preview/Reconcile they don't need the diffs to still
-    // be current, so a completed reconcile deliberately does NOT clear this the way it clears _lastRun.
-    // It tracks the same run as _lastRun otherwise (set together on a successful verify, cleared together
-    // by InvalidateStaleRun when the screen no longer matches what was verified).
-    private RunRecord? _certifiableRun;
-
     private string _lastSrc = "", _lastDst = "";
     private NetworkCredential? _lastSrcCred, _lastDstCred;
     private string? _lastSrcCredTarget, _lastDstCredTarget; // which combo entry was verified, for staleness checks
@@ -487,7 +479,6 @@ public partial class VerifyPage : Page
             LogInaccessible(result.InaccessiblePaths); // skipped/unreadable paths, for sign-off integrity
             _lastDiffs = diffs;
             _lastRun = result.Run;
-            _certifiableRun = result.Run;
             _lastSrc = src; _lastDst = dst;
             _lastSrcCred = srcCred; _lastDstCred = dstCred;
             _lastSrcCredTarget = SelectedTarget(SourceCredBox); _lastDstCredTarget = SelectedTarget(DestCredBox);
@@ -950,7 +941,8 @@ public partial class VerifyPage : Page
                 AppendLog($"[FAILED] {f.RelativePath} – {f.Error}");
 
             // Record what this reconcile did on the verify run it was based on, so a certificate for
-            // that run can show it (e.g. total data copied) even after the destination has moved on.
+            // that run's own history/report even though the certificate no longer documents it (the
+            // certificate attests to a verify only — see below).
             if (_lastRun is { } reconciledRun)
             {
                 reconciledRun.ReconciledAtUtc = DateTime.UtcNow;
@@ -960,19 +952,14 @@ public partial class VerifyPage : Page
                 reconciledRun.ReconcileStopped = result.Stopped;
                 try { await _repository.SaveAsync(reconciledRun); }
                 catch { /* best-effort — the reconcile itself already succeeded or failed independently */ }
-
-                // Sign off / Export certificate stay available for the run just reconciled — it's a
-                // historical fact about what was found and fixed, not something the diff invalidation
-                // below applies to. Re-assigning here (though it's already the same object) keeps this
-                // independent of _lastRun's lifecycle rather than relying on that coincidence.
-                _certifiableRun = reconciledRun;
             }
 
-            // Destination changed; require a fresh verify before reconciling again (Preview/Reconcile
-            // only — Sign off/Export certificate are handled above, deliberately not reset here).
+            // Destination changed; require a fresh verify before reconciling — or signing off/exporting a
+            // certificate — again. The certificate attests to what a verify found, not to what a reconcile
+            // did, so the run just reconciled is no longer a valid target for either until re-verified.
             _lastDiffs = null;
             _lastRun = null;
-            UpdateComplianceState(); // re-evaluates against _certifiableRun, which reconcile just kept alive
+            UpdateComplianceState(); // sign off/export certificate follow the same reset as preview/reconcile
             AppendLog(result.Stopped
                 ? "Reconcile was stopped before finishing – re-run Verify to see what still differs."
                 : "Re-run Verify to confirm the destination now matches.");
@@ -1107,10 +1094,7 @@ public partial class VerifyPage : Page
     /// verified state, drop the result and require a fresh verify.</summary>
     private void InvalidateStaleRun()
     {
-        // _lastRun alone isn't enough to guard on: a completed reconcile nulls it (Preview/Reconcile need
-        // a fresh verify) but deliberately leaves _certifiableRun set (Sign off/Export stay valid for the
-        // run just reconciled). That run must still be invalidated here if the screen moves on from it.
-        if (_lastRun is null && _certifiableRun is null) return; // nothing actionable to invalidate
+        if (_lastRun is null) return; // nothing actionable to invalidate
 
         var src = SourceBox.Text?.Trim() ?? "";
         var dst = DestBox.Text?.Trim() ?? "";
@@ -1122,7 +1106,6 @@ public partial class VerifyPage : Page
 
         _lastDiffs = null;
         _lastRun = null;
-        _certifiableRun = null;
         UpdateReconcileState();
         UpdateComplianceState();
         StatusText.Text = "Source, destination, or credentials changed – run Verify again before Preview/Reconcile.";
@@ -1137,25 +1120,25 @@ public partial class VerifyPage : Page
     }
 
     /// <summary>Enables Sign off / Export certificate once a verify has completed (so they act on a real
-    /// run) and disables them while a run is in progress. Tracks <c>_certifiableRun</c>, not
-    /// <c>_lastRun</c> — a completed reconcile clears the latter (Preview/Reconcile need a fresh verify)
-    /// but these two stay available for the run that was just reconciled.</summary>
+    /// verify) and disables them while a run is in progress or once a reconcile has moved the destination
+    /// on — the certificate attests to a verify, not a reconcile, so it requires a fresh one afterward,
+    /// same as Preview/Reconcile.</summary>
     private void UpdateComplianceState()
     {
-        bool ready = _certifiableRun is not null && !_running;
+        bool ready = _lastRun is not null && !_running;
         VerifySignOffButton.IsEnabled = VerifyCertButton.IsEnabled = ready;
     }
 
     private async void OnVerifySignOff(object sender, RoutedEventArgs e)
     {
-        if (_certifiableRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
+        if (_lastRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
         var status = await ComplianceActions.SignOffAsync(_repository, run);
         if (status is not null) StatusText.Text = status;
     }
 
     private async void OnVerifyExportCertificate(object sender, RoutedEventArgs e)
     {
-        if (_certifiableRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
+        if (_lastRun is not { } run) { StatusText.Text = "Run a verify first."; return; }
         var status = await ComplianceActions.ExportCertificateAsync(run);
         if (status is not null) StatusText.Text = status;
     }

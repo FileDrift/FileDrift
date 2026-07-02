@@ -227,10 +227,10 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <ui:Button x:Name="VerifySignOffButton" Content="Sign off" Icon="{ui:SymbolIcon Checkmark24}"
                                Appearance="Primary" Click="OnVerifySignOff" IsEnabled="False"
-                               ToolTip="Record review sign-off for the completed run shown below." />
+                               ToolTip="Record review sign-off for the completed verify shown below. Only valid for a verify — after a reconcile, run Verify again before signing off." />
                     <ui:Button x:Name="VerifyCertButton" Content="Export certificate" Icon="{ui:SymbolIcon DocumentRibbon24}"
                                Margin="8,0,0,0" Click="OnVerifyExportCertificate" IsEnabled="False"
-                               ToolTip="Save an HTML certificate of verification for the completed run shown below." />
+                               ToolTip="Save an HTML certificate of verification for the completed verify shown below. Only valid for a verify — after a reconcile, run Verify again before exporting a certificate." />
                     <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center"
                                 ToolTip="How often the live readouts (activity log and transfer rate) refresh during a run. Takes effect immediately, even mid-run. Also set in Settings.">
                         <ui:TextBlock Text="Live refresh" VerticalAlignment="Center" Margin="0,0,8,0"
