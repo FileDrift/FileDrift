@@ -155,7 +155,7 @@ public sealed class ReconcileEngine
 
                     if (a.CopyContent)
                     {
-                        await CopyFileAsync(a.SourceFullPath, a.DestFullPath, fileBytes =>
+                        long actualBytes = await CopyFileAsync(a.SourceFullPath, a.DestFullPath, fileBytes =>
                         {
                             long now = bytes + fileBytes;
                             onLiveBytes?.Invoke(now); // every chunk — feeds the live transfer-rate readout
@@ -170,7 +170,8 @@ public sealed class ReconcileEngine
                             }
                         }, hardCancel);
 
-                        bytes += a.SizeBytes;
+                        // Actual bytes copied, not the plan's size — the file may have changed since verify.
+                        bytes += actualBytes;
                         lastReported = bytes;
                         onLiveBytes?.Invoke(bytes);
                         if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
@@ -268,10 +269,12 @@ public sealed class ReconcileEngine
         };
     }
 
-    /// <summary>Copies a file in buffer-sized chunks, invoking <paramref name="onFileBytes"/> with the
-    /// running per-file byte count after each chunk (for live progress). Honors cancellation between
-    /// chunks (within a buffer), so a hard cancel stops promptly.</summary>
-    private static async Task CopyFileAsync(string source, string dest, Action<long> onFileBytes, CancellationToken ct)
+    /// <summary>Copies a file via the double-buffered <see cref="StreamPump"/> (the next chunk is read
+    /// while the current one writes, so source and destination latency overlap), invoking
+    /// <paramref name="onFileBytes"/> with the running per-file byte count after each chunk (for live
+    /// progress). Honors cancellation on every read and write, so a hard cancel stops promptly.
+    /// Returns the actual number of bytes copied.</summary>
+    private static async Task<long> CopyFileAsync(string source, string dest, Action<long> onFileBytes, CancellationToken ct)
     {
         var dir = Path.GetDirectoryName(dest);
         if (!string.IsNullOrEmpty(dir))
@@ -281,20 +284,13 @@ public sealed class ReconcileEngine
         if (File.Exists(dest) && (File.GetAttributes(dest) & FileAttributes.ReadOnly) != 0)
             File.SetAttributes(dest, File.GetAttributes(dest) & ~FileAttributes.ReadOnly);
 
+        long fileBytes;
         await using (var src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read,
                          BufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan))
         await using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
                          BufferSize, FileOptions.Asynchronous))
         {
-            var buffer = new byte[BufferSize];
-            long fileBytes = 0;
-            int read;
-            while ((read = await src.ReadAsync(buffer, ct)) > 0)
-            {
-                await dst.WriteAsync(buffer.AsMemory(0, read), ct);
-                fileBytes += read;
-                onFileBytes(fileBytes);
-            }
+            fileBytes = await StreamPump.PumpAsync(src, dst, onFileBytes, ct);
         }
 
         // Preserve source timestamps so a follow-up verify reports the pair as matched.
@@ -310,5 +306,7 @@ public sealed class ReconcileEngine
             File.SetAttributes(dest, File.GetAttributes(source) & copyable);
         }
         catch { /* metadata is best-effort — the file content and last-write time are already set */ }
+
+        return fileBytes;
     }
 }

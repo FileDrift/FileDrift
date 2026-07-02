@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc12** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc13** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,12 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc13 (2026-07-01)
+
+- **Double-buffered reconcile copy (Tier 3 of the pre-release optimization review).** While one chunk is being written to the destination, the next is already being read from the source — so source latency and destination latency overlap instead of adding, approaching the throughput of the slower side alone on network↔disk copies. The pump is a standalone stream-to-stream helper (`StreamPump`) with progress and cancellation on every read and write, deliberately shaped so the planned object-storage write target can reuse it unchanged.
+- Byte progress during reconcile now reports the **actual** bytes copied per file rather than the plan's recorded size (they could drift if a file changed between verify and reconcile).
+- Cancel semantics are unchanged by design (hard stop still aborts the in-flight file and removes the partial; soft stop still finishes the current file) and remain covered by the engine tests — but the 3-way cancel deserves a manual pass on a real copy job before 1.0.
 
 ### 1.0.0-rc12 (2026-07-01)
 
