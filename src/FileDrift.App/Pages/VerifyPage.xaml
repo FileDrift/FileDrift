@@ -36,7 +36,7 @@
             <ui:TextBox x:Name="SourceBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,6"
                         PlaceholderText="\\server\share or D:\data" TextChanged="OnSourceChanged" />
             <ComboBox x:Name="SourceCredBox" Grid.Row="0" Grid.Column="2" Width="150" Margin="0,0,8,6"
-                      ToolTip="Credential to authenticate the source share" />
+                      ToolTip="Credential to authenticate the source share" SelectionChanged="OnCredentialChanged" />
             <ui:Button Grid.Row="0" Grid.Column="3" Content="Browse" Margin="0,0,0,6"
                        Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseSource" />
 
@@ -45,7 +45,7 @@
             <ui:TextBox x:Name="DestBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,0"
                         PlaceholderText="\\server2\share2 or E:\backup" TextChanged="OnDestChanged" />
             <ComboBox x:Name="DestCredBox" Grid.Row="1" Grid.Column="2" Width="150" Margin="0,0,8,0"
-                      ToolTip="Credential to authenticate the destination share" />
+                      ToolTip="Credential to authenticate the destination share" SelectionChanged="OnCredentialChanged" />
             <ui:Button Grid.Row="1" Grid.Column="3" Content="Browse"
                        Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseDest" />
         </Grid>

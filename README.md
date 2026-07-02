@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc14** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc15** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc15 (2026-07-02)
+
+- **Same fix as rc14, extended to credentials.** Preview and Reconcile also captured the source/destination *credential* selection from the last verify, not the current dropdown choice. Manually switching either credential dropdown after a verify — without re-verifying — left Preview/Reconcile enabled and would silently write using the old credential while the screen showed a different one selected. Picking a different saved credential now invalidates the result exactly like editing a path does.
 
 ### 1.0.0-rc14 (2026-07-02)
 

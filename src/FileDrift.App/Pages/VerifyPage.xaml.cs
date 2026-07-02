@@ -38,6 +38,7 @@ public partial class VerifyPage : Page
     private RunRecord? _lastRun;
     private string _lastSrc = "", _lastDst = "";
     private NetworkCredential? _lastSrcCred, _lastDstCred;
+    private string? _lastSrcCredTarget, _lastDstCredTarget; // which combo entry was verified, for staleness checks
 
     public VerifyPage()
     {
@@ -220,6 +221,11 @@ public partial class VerifyPage : Page
 
     // ── credential combos ──
 
+    // Guards the rebuild below: clearing/repopulating a ComboBox's Items fires SelectionChanged several
+    // times as the selection is lost and re-settled, which would otherwise trip InvalidateStaleRun on a
+    // transient intermediate value (e.g. a plain page revisit clearing _lastRun for no real reason).
+    private bool _refreshingCredCombos;
+
     private void RefreshCredentialCombos()
     {
         string[] targets;
@@ -238,11 +244,28 @@ public partial class VerifyPage : Page
 
         _hasDefaultCredential = defaultLabel is not null;
 
-        Populate(SourceCredBox, targets, defaultLabel);
-        Populate(DestCredBox, targets, defaultLabel);
+        _refreshingCredCombos = true;
+        try
+        {
+            Populate(SourceCredBox, targets, defaultLabel);
+            Populate(DestCredBox, targets, defaultLabel);
 
-        AutoSelectCredential(SourceCredBox, SourceBox.Text);
-        AutoSelectCredential(DestCredBox, DestBox.Text);
+            AutoSelectCredential(SourceCredBox, SourceBox.Text);
+            AutoSelectCredential(DestCredBox, DestBox.Text);
+        }
+        finally { _refreshingCredCombos = false; }
+
+        // Check the SETTLED selection once, not the transient states visited while rebuilding.
+        InvalidateStaleRun();
+    }
+
+    /// <summary>Fires when the user (not a programmatic rebuild) picks a different saved credential.
+    /// Reconcile writes with whatever is selected here, so switching credentials after a verify without
+    /// re-verifying must invalidate the result the same way changing the path does.</summary>
+    private void OnCredentialChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_refreshingCredCombos) return;
+        InvalidateStaleRun();
     }
 
     private static void Populate(ComboBox box, string[] targets, string? defaultLabel)
@@ -436,6 +459,7 @@ public partial class VerifyPage : Page
             _lastRun = result.Run;
             _lastSrc = src; _lastDst = dst;
             _lastSrcCred = srcCred; _lastDstCred = dstCred;
+            _lastSrcCredTarget = SelectedTarget(SourceCredBox); _lastDstCredTarget = SelectedTarget(DestCredBox);
             UpdateComplianceState(); // a completed verify can now be signed off / certified
         }
         catch (OperationCanceledException) { StatusText.Text = "Cancelled."; ProgressBar.Value = 0; AppendLog("Cancelled."); }
@@ -1001,11 +1025,12 @@ public partial class VerifyPage : Page
         UpdateComplianceState();     // Sign off / Export certificate follow the same run lifecycle
     }
 
-    /// <summary>Preview/Reconcile/Sign off/Export act on <c>_lastSrc</c>/<c>_lastDst</c> (the paths
-    /// actually verified), not on whatever the boxes currently show. If the user edits either path after
-    /// a verify without re-running it, those stale fields no longer describe the trees on screen — acting
-    /// on them would silently reconcile against paths different from what's displayed. So the moment the
-    /// boxes stop matching the last verified pair, drop the result and require a fresh verify.</summary>
+    /// <summary>Preview/Reconcile/Sign off/Export act on <c>_lastSrc</c>/<c>_lastDst</c>/the verified
+    /// credentials, not on whatever the boxes currently show. If the user edits either path, or picks a
+    /// different saved credential, after a verify without re-running it, those stale fields no longer
+    /// describe what's on screen — acting on them would silently target a different tree, or write with
+    /// different permissions than the ones now selected. So the moment the boxes stop matching the last
+    /// verified state, drop the result and require a fresh verify.</summary>
     private void InvalidateStaleRun()
     {
         if (_lastRun is null) return; // nothing actionable to invalidate
@@ -1013,14 +1038,16 @@ public partial class VerifyPage : Page
         var src = SourceBox.Text?.Trim() ?? "";
         var dst = DestBox.Text?.Trim() ?? "";
         if (string.Equals(src, _lastSrc, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(dst, _lastDst, StringComparison.OrdinalIgnoreCase))
-            return; // unchanged (or typed back to the verified pair) — still valid
+            string.Equals(dst, _lastDst, StringComparison.OrdinalIgnoreCase) &&
+            SelectedTarget(SourceCredBox) == _lastSrcCredTarget &&
+            SelectedTarget(DestCredBox) == _lastDstCredTarget)
+            return; // unchanged (or dialed back to the exact verified state) — still valid
 
         _lastDiffs = null;
         _lastRun = null;
         UpdateReconcileState();
         UpdateComplianceState();
-        StatusText.Text = "Source or destination changed – run Verify again before Preview/Reconcile.";
+        StatusText.Text = "Source, destination, or credentials changed – run Verify again before Preview/Reconcile.";
     }
 
     /// <summary>Enables Preview/Reconcile when the last completed verify has files to copy or overwrite.</summary>
