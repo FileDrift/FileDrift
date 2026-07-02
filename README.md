@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc18** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc19** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc19 (2026-07-02)
+
+- **Fixed: Sign off and Export certificate went dark on the Verify page immediately after a reconcile**, even though the exact same actions remained available for that same run on the History page. Preview and Reconcile correctly require a fresh verify after a reconcile (the destination changed, so the old diffs are stale) — but Sign off and Export certificate don't act on the diffs, they document a historical fact about the run and its reconcile, which is still perfectly valid the moment the reconcile finishes. The two are now tracked independently, so Sign off and Export certificate stay available on the Verify page for the run you just reconciled, right when the review is freshest, while Preview/Reconcile still correctly demand a fresh verify.
 
 ### 1.0.0-rc18 (2026-07-02)
 
