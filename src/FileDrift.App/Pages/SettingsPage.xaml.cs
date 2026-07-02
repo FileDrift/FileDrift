@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using FileDrift.App.Settings;
+using FileDrift.Core;
 using FileDrift.Core.Persistence;
 
 namespace FileDrift.App.Pages;
@@ -38,8 +38,7 @@ public partial class SettingsPage : Page
         LogThrottleSlider.Value = settings.LogThrottleSeconds;
         LogThrottleValue.Text = $"{settings.LogThrottleSeconds:0.0} s";
 
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = version is null ? "unknown" : $"FileDrift {version.Major}.{version.Minor}.{version.Build}";
+        VersionText.Text = $"FileDrift {AppInfo.Version}";
         DbPathText.Text = AppPaths.HistoryDatabase;
 
         _suppress = false;

@@ -290,6 +290,7 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(SourceCredBox, SourceBox.Text);
             UpdateModeReadout();
+            InvalidateStaleRun();
         }
         catch { /* partial/malformed path mid-type — ignore until it parses */ }
     }
@@ -300,6 +301,7 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(DestCredBox, DestBox.Text);
             UpdateModeReadout();
+            InvalidateStaleRun();
         }
         catch { /* partial/malformed path mid-type — ignore until it parses */ }
     }
@@ -997,6 +999,28 @@ public partial class VerifyPage : Page
             UpdateReconcileState();  // re-enable Reconcile/Preview if the last verify is actionable
         }
         UpdateComplianceState();     // Sign off / Export certificate follow the same run lifecycle
+    }
+
+    /// <summary>Preview/Reconcile/Sign off/Export act on <c>_lastSrc</c>/<c>_lastDst</c> (the paths
+    /// actually verified), not on whatever the boxes currently show. If the user edits either path after
+    /// a verify without re-running it, those stale fields no longer describe the trees on screen — acting
+    /// on them would silently reconcile against paths different from what's displayed. So the moment the
+    /// boxes stop matching the last verified pair, drop the result and require a fresh verify.</summary>
+    private void InvalidateStaleRun()
+    {
+        if (_lastRun is null) return; // nothing actionable to invalidate
+
+        var src = SourceBox.Text?.Trim() ?? "";
+        var dst = DestBox.Text?.Trim() ?? "";
+        if (string.Equals(src, _lastSrc, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(dst, _lastDst, StringComparison.OrdinalIgnoreCase))
+            return; // unchanged (or typed back to the verified pair) — still valid
+
+        _lastDiffs = null;
+        _lastRun = null;
+        UpdateReconcileState();
+        UpdateComplianceState();
+        StatusText.Text = "Source or destination changed – run Verify again before Preview/Reconcile.";
     }
 
     /// <summary>Enables Preview/Reconcile when the last completed verify has files to copy or overwrite.</summary>
