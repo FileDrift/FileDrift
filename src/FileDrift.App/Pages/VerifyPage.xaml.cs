@@ -23,8 +23,8 @@ public partial class VerifyPage : Page
     private readonly VerifyEngine _engine;
     private readonly PreflightEngine _preflight;
     private readonly ReconcileEngine _reconcile = new();
-    private readonly IRunRepository _repository = new SqliteRunRepository();
-    private readonly ICredentialStore _credentials = new WindowsCredentialStore();
+    private readonly IRunRepository _repository = AppServices.Repository;
+    private readonly ICredentialStore _credentials = AppServices.Credentials;
     private CancellationTokenSource? _cts;            // hard cancel (abort + rollback)
     private CancellationTokenSource? _softStop;       // soft stop (finish current, stop before next) — reconcile only
     private bool _reconcileRunning;                    // OnCancelClick prompts only during a reconcile
@@ -101,9 +101,7 @@ public partial class VerifyPage : Page
         if (VerifyLogThrottleValue is not null) VerifyLogThrottleValue.Text = $"{seconds:0.0} s";
         if (_syncingThrottle) return; // programmatic sync from RuntimeOptions — don't re-persist
         RuntimeOptions.SetLogThrottle(seconds); // live: an in-flight run picks this up on its next tick
-        var s = SettingsStore.Load();
-        s.LogThrottleSeconds = seconds;
-        SettingsStore.Save(s);
+        ThrottleSettingSaver.RequestSave();     // debounced: a drag fires this on every snap point
     }
 
     // ── live transfer rate (reconcile only) ──

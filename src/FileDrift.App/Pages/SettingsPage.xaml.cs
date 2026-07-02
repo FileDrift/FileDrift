@@ -204,9 +204,7 @@ public partial class SettingsPage : Page
         RuntimeOptions.SetLogThrottle(seconds); // live: an in-flight run picks this up on its next tick
         if (_suppress) return;
 
-        var settings = SettingsStore.Load();
-        settings.LogThrottleSeconds = seconds;
-        SettingsStore.Save(settings);
+        ThrottleSettingSaver.RequestSave(); // debounced: a drag fires this on every snap point
     }
 
     private static string? SelectedText(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Content as string;

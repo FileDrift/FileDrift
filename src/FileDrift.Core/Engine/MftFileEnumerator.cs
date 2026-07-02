@@ -79,8 +79,12 @@ public sealed class MftFileEnumerator : IFileEnumerator
 
         ct.ThrowIfCancellationRequested();
 
-        // Phase 2 — reconstruct paths and emit FileRecord objects
+        // Phase 2 — reconstruct paths and emit FileRecord objects. Directory paths are memoized
+        // (FRN → full path), so each file is one dictionary lookup + one concat instead of walking its
+        // whole ancestor chain — the walk was O(depth) lookups plus a Stack/HashSet/array allocation
+        // per file, which dominated phase 2 on million-file volumes.
         var normalizedRoot = rootPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var dirPaths = new Dictionary<ulong, string?> { [rootFrn] = driveRoot };
         long fileCount = 0, byteCount = 0;
 
         foreach (var (frn, entry) in frnMap)
@@ -89,8 +93,10 @@ public sealed class MftFileEnumerator : IFileEnumerator
 
             if (entry.IsDirectory) continue;
 
-            var fullPath = ReconstructPath(frn, frnMap, rootFrn, driveRoot);
-            if (fullPath is null) continue;
+            var parentPath = DirectoryPath(entry.ParentFrn, frnMap, dirPaths);
+            if (parentPath is null) continue; // orphaned or cyclic ancestry — corrupt/stale MFT data
+
+            var fullPath = Join(parentPath, entry.Name);
 
             if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)) continue;
 
@@ -100,7 +106,9 @@ public sealed class MftFileEnumerator : IFileEnumerator
 
             await writer.WriteAsync(new FileRecord
             {
-                RelativePath     = Path.GetRelativePath(rootPath, fullPath),
+                // The StartsWith guard above just proved the prefix, so the relative path is a substring —
+                // Path.GetRelativePath would re-normalize both full paths on every call.
+                RelativePath     = fullPath[normalizedRoot.Length..],
                 FullPath         = fullPath,
                 SizeBytes        = sizeBytes,
                 LastWriteTimeUtc = entry.LastWriteTimeUtc,
@@ -198,34 +206,43 @@ public sealed class MftFileEnumerator : IFileEnumerator
         return ((ulong)info.FileIndexHigh << 32) | info.FileIndexLow;
     }
 
-    private static string? ReconstructPath(
+    /// <summary>Resolves a directory FRN to its full path, memoizing every level it touches in
+    /// <paramref name="cache"/> so each directory's ancestry is walked at most once per scan.
+    /// Returns null (also cached) for orphaned or cyclic chains — corrupt/stale MFT data.</summary>
+    private static string? DirectoryPath(
         ulong frn,
         Dictionary<ulong, FrnEntry> frnMap,
-        ulong rootFrn,
-        string driveRoot)
+        Dictionary<ulong, string?> cache)
     {
-        var parts   = new Stack<string>();
-        var visited = new HashSet<ulong>();
+        if (cache.TryGetValue(frn, out var known)) return known;
+
+        // Walk up until we hit a cached ancestor (the root is pre-seeded), an orphan, or a cycle.
+        var chain = new List<ulong>();
+        var onChain = new HashSet<ulong>();
+        string? basePath;
         var current = frn;
-
-        while (current != rootFrn)
+        while (true)
         {
-            if (!visited.Add(current)) return null;           // cycle — corrupt MFT
-            if (!frnMap.TryGetValue(current, out var entry)) return null; // orphaned
-
-            parts.Push(entry.Name);
+            if (cache.TryGetValue(current, out var hit)) { basePath = hit; break; }
+            if (!onChain.Add(current) ||                                      // cycle — corrupt MFT
+                !frnMap.TryGetValue(current, out var entry)) { basePath = null; break; } // orphaned
+            chain.Add(current);
             current = entry.ParentFrn;
         }
 
-        if (parts.Count == 0) return driveRoot;
+        // Unwind, building and caching each level (a failure is cached too, so it's never re-walked).
+        for (int i = chain.Count - 1; i >= 0; i--)
+        {
+            var level = chain[i];
+            basePath = basePath is null ? null : Join(basePath, frnMap[level].Name);
+            cache[level] = basePath;
+        }
 
-        var pathParts = new string[parts.Count + 1];
-        pathParts[0] = driveRoot;
-        for (int i = 1; parts.Count > 0; i++)
-            pathParts[i] = parts.Pop();
-
-        return Path.Combine(pathParts);
+        return basePath;
     }
+
+    private static string Join(string parent, string name) =>
+        parent.EndsWith(Path.DirectorySeparatorChar) ? parent + name : parent + Path.DirectorySeparatorChar + name;
 
     private readonly record struct FrnEntry(ulong ParentFrn, string Name, bool IsDirectory, DateTime LastWriteTimeUtc);
 }

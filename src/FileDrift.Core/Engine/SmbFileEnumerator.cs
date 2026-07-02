@@ -29,9 +29,10 @@ public sealed class SmbFileEnumerator : IFileEnumerator
         });
 
         var inaccessible = _inaccessible = new(); // fresh per enumeration
+        var normalizedRoot = Path.GetFullPath(rootPath); // children's FullName strings build on this exact text
         var producerTask = Task.Run(async () =>
         {
-            try   { await ScanTreeAsync(rootPath, options, channel.Writer, progress, inaccessible, cancellationToken); }
+            try   { await ScanTreeAsync(normalizedRoot, options, channel.Writer, progress, inaccessible, cancellationToken); }
             finally { channel.Writer.Complete(); }
         }, cancellationToken);
 
@@ -56,31 +57,33 @@ public sealed class SmbFileEnumerator : IFileEnumerator
         int pending     = 1;
         long filesFound = 0, bytesFound = 0;
 
+        // Fast relative paths: every enumerated FullName is the root text plus a suffix, so a substring
+        // replaces Path.GetRelativePath's per-call full normalization (it re-runs GetFullPath on both
+        // arguments — real CPU at millions of files). Fallback kept for safety (e.g. the root itself → ".").
+        var rootPrefix = rootPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string RelativeTo(string fullPath) =>
+            fullPath.Length > rootPrefix.Length && fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+                ? fullPath[rootPrefix.Length..]
+                : Path.GetRelativePath(rootPath, fullPath);
+
         void ScanDir(string dir)
         {
             _ = Task.Run(async () =>
             {
-                string[] subdirs = [];
+                List<string>? subdirList = null;
                 await sem.WaitAsync(ct);
                 try
                 {
                     ct.ThrowIfCancellationRequested();
                     try
                     {
-                        subdirs = Directory.GetDirectories(dir);
-
-                        // Don't recurse into reparse points (junctions, symlinks, mount points) — avoids
-                        // infinite loops and double-counting. MFT enumeration already skips them.
-                        if (subdirs.Length > 0)
-                            subdirs = Array.FindAll(subdirs, sub => !IsReparsePoint(sub));
-
                         // Folders are where explicit permissions usually live — emit them when comparing ACLs.
                         if (options.IncludeAcl)
                         {
                             var di = new DirectoryInfo(dir);
                             await writer.WriteAsync(new FileRecord
                             {
-                                RelativePath      = Path.GetRelativePath(rootPath, dir),
+                                RelativePath      = RelativeTo(dir),
                                 FullPath          = dir,
                                 SizeBytes         = 0,
                                 LastWriteTimeUtc  = di.LastWriteTimeUtc,
@@ -90,43 +93,54 @@ public sealed class SmbFileEnumerator : IFileEnumerator
                             }, ct);
                         }
 
-                        foreach (var file in Directory.EnumerateFiles(dir))
+                        // ONE FindFirstFileEx pass per directory: subdirectories and files together, with
+                        // size/timestamps/attributes populated from the same find data. The previous shape
+                        // (GetDirectories + GetAttributes per subdir + EnumerateFiles + new FileInfo per
+                        // file) cost 2–3 extra SMB round-trips per entry.
+                        subdirList = [];
+                        foreach (var entry in new DirectoryInfo(dir).EnumerateFileSystemInfos())
                         {
-                            try
+                            if (entry is DirectoryInfo sub)
                             {
-                                var info = new FileInfo(file);
-                                await writer.WriteAsync(new FileRecord
-                                {
-                                    RelativePath      = Path.GetRelativePath(rootPath, file),
-                                    FullPath          = file,
-                                    SizeBytes         = info.Length,
-                                    LastWriteTimeUtc  = info.LastWriteTimeUtc,
-                                    CreatedTimeUtc    = info.CreationTimeUtc,
-                                    IsDirectory       = false,
-                                    Source            = EnumerationSource.Smb,
-                                }, ct);
-
-                                long fc = Interlocked.Increment(ref filesFound);
-                                Interlocked.Add(ref bytesFound, info.Length);
-
-                                if (fc % 500 == 0)
-                                    progress?.Report(new EnumerationProgress
-                                    {
-                                        FilesFound       = fc,
-                                        BytesFound       = Volatile.Read(ref bytesFound),
-                                        CurrentDirectory = dir,
-                                    });
+                                // Don't recurse into reparse points (junctions, symlinks, mount points) —
+                                // avoids infinite loops and double-counting. MFT already skips them.
+                                if ((sub.Attributes & FileAttributes.ReparsePoint) == 0)
+                                    subdirList.Add(sub.FullName);
+                                continue;
                             }
-                            catch (UnauthorizedAccessException) { inaccessible.Add(file); }
-                            catch (IOException) { inaccessible.Add(file); }
+
+                            var info = (FileInfo)entry;
+                            await writer.WriteAsync(new FileRecord
+                            {
+                                RelativePath      = RelativeTo(info.FullName),
+                                FullPath          = info.FullName,
+                                SizeBytes         = info.Length,
+                                LastWriteTimeUtc  = info.LastWriteTimeUtc,
+                                CreatedTimeUtc    = info.CreationTimeUtc,
+                                IsDirectory       = false,
+                                Source            = EnumerationSource.Smb,
+                            }, ct);
+
+                            long fc = Interlocked.Increment(ref filesFound);
+                            Interlocked.Add(ref bytesFound, info.Length);
+
+                            if (fc % 500 == 0)
+                                progress?.Report(new EnumerationProgress
+                                {
+                                    FilesFound       = fc,
+                                    BytesFound       = Volatile.Read(ref bytesFound),
+                                    CurrentDirectory = dir,
+                                });
                         }
                     }
                     catch (UnauthorizedAccessException) { inaccessible.Add(dir); }
                     catch (IOException) { inaccessible.Add(dir); }
                 }
-                catch (OperationCanceledException ex) { exceptions.Add(ex); subdirs = []; }
-                catch (Exception ex)                  { exceptions.Add(ex); subdirs = []; }
+                catch (OperationCanceledException ex) { exceptions.Add(ex); subdirList = null; }
+                catch (Exception ex)                  { exceptions.Add(ex); subdirList = null; }
                 finally { sem.Release(); }
+
+                string[] subdirs = subdirList is null ? [] : [.. subdirList];
 
                 // Atomically account for new subdirs and mark this dir done.
                 // pendingCount can only reach 0 here when subdirs == [] (proven in design).
@@ -155,9 +169,4 @@ public sealed class SmbFileEnumerator : IFileEnumerator
         ct.ThrowIfCancellationRequested();
     }
 
-    private static bool IsReparsePoint(string path)
-    {
-        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
-        catch { return false; } // unreadable attributes — let the normal scan handle/skip it
-    }
 }

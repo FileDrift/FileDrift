@@ -19,7 +19,7 @@ public partial class HistoryPage : Page
     public HistoryPage()
     {
         InitializeComponent();
-        _repository = new SqliteRunRepository();
+        _repository = AppServices.Repository;
         HistoryGrid.ItemsSource = _rows;
         Loaded += async (_, _) => await LoadAsync();
     }

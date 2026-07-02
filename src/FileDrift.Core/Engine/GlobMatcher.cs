@@ -36,6 +36,9 @@ public sealed class GlobMatcher
     private static Regex ToRegex(string glob)
     {
         var escaped = Regex.Escape(glob).Replace(@"\*", ".*").Replace(@"\?", ".");
-        return new Regex("^" + escaped + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        // Compiled: with patterns set, IsExcluded runs once per enumerated record (millions on big
+        // trees), so the one-time JIT cost of each pattern pays for itself immediately.
+        return new Regex("^" + escaped + "$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     }
 }

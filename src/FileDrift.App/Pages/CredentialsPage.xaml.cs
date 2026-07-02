@@ -10,7 +10,7 @@ namespace FileDrift.App.Pages;
 
 public partial class CredentialsPage : Page
 {
-    private readonly ICredentialStore _credentials = new WindowsCredentialStore();
+    private readonly ICredentialStore _credentials = AppServices.Credentials;
     private readonly ObservableCollection<CredRow> _rows = new();
 
     public CredentialsPage()

@@ -9,7 +9,7 @@ namespace FileDrift.App.Pages;
 
 public partial class CompliancePage : Page
 {
-    private readonly IRunRepository _repository = new SqliteRunRepository();
+    private readonly IRunRepository _repository = AppServices.Repository;
     private readonly ObservableCollection<CertCheck> _rows = new();
 
     public CompliancePage()

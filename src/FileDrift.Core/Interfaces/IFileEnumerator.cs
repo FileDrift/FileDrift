@@ -20,6 +20,9 @@ public interface IFileEnumerator
     /// <summary>
     /// Streams file records from <paramref name="rootPath"/>.
     /// Hash and ACL fields on each record are populated only if requested via <paramref name="options"/>.
+    /// CONVENTION: <see cref="FileRecord.RelativePath"/> uses backslash ('\') separators — comparison
+    /// keys on exact (case-insensitive) string equality, so a non-filesystem implementation (e.g. a
+    /// future object-storage enumerator whose native keys use '/') must normalize to '\' on emit.
     /// </summary>
     IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
