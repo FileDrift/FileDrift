@@ -119,6 +119,13 @@ public partial class VerifyPage : Page
     private ReconcileProgress? _reconLatestProgress;     // latest reconcile report, appended by the refresh tick
     private DispatcherTimer? _rateTimer;
 
+    // Once a soft stop is requested, the whole-plan ETA no longer applies (the run stops after this file) —
+    // but the file in flight is still genuinely finishing, so its own ETA is worth showing. Prefix sums let
+    // "bytes remaining in the current file" be a single lookup + subtraction on every tick, no per-file
+    // start-time bookkeeping needed: cumulative bytes once file `i` completes, minus bytes copied so far.
+    private long[] _reconCumulativeBytes = [];
+    private int _reconProcessed; // 1-indexed action currently in flight, from the latest ReconcileProgress
+
     private void StartRateMeter()
     {
         Interlocked.Exchange(ref _liveBytes, 0);
@@ -181,10 +188,25 @@ public partial class VerifyPage : Page
         if (avg >= 1)
         {
             var readout = $"{FormatSize((long)avg)}/s";
-            long remaining = _reconTotalBytes - now;
-            // ETA from the SAME smoothed rate; only once it's settled, bytes remain, and we're not stopping.
-            if (_reconTotalBytes > 0 && remaining > 0 && _rateSamples.Count >= EtaMinSamples && _stopMode == StopMode.None)
-                readout += $"  ·  ~{FormatDuration(remaining / avg)} left";
+            if (_rateSamples.Count >= EtaMinSamples)
+            {
+                int fileIndex = _reconProcessed - 1;
+                if (_stopMode == StopMode.Soft && fileIndex >= 0 && fileIndex < _reconCumulativeBytes.Length)
+                {
+                    // A soft stop drops the whole-plan ETA (the run won't reach the rest of the plan), but
+                    // the file in flight is still genuinely finishing — its own ETA is still honest and
+                    // useful. Bytes remaining in it = cumulative bytes once it completes, minus copied so far.
+                    long remainingInFile = _reconCumulativeBytes[fileIndex] - now;
+                    if (remainingInFile > 0)
+                        readout += $"  ·  ~{FormatDuration(remainingInFile / avg)} left in this file";
+                }
+                else if (_stopMode == StopMode.None)
+                {
+                    long remaining = _reconTotalBytes - now;
+                    if (_reconTotalBytes > 0 && remaining > 0)
+                        readout += $"  ·  ~{FormatDuration(remaining / avg)} left";
+                }
+            }
             RateText.Text = readout;
         }
         else
@@ -861,6 +883,11 @@ public partial class VerifyPage : Page
         _lastReconScreenProcessed = 0;
         _lastReconScreenBytes = 0;
         _reconTotalBytes = plan.TotalBytes;
+        _reconProcessed = 0;
+        _reconCumulativeBytes = new long[plan.Actions.Count];
+        long running = 0;
+        for (int i = 0; i < plan.Actions.Count; i++)
+            _reconCumulativeBytes[i] = running += plan.Actions[i].SizeBytes;
         StartRateMeter();
         StartRunLog("reconcile", _lastSrc, _lastDst);
         AppendLog($"Reconcile: copying {plan.CopyCount:N0}, overwriting {plan.OverwriteCount:N0} " +
@@ -868,6 +895,7 @@ public partial class VerifyPage : Page
 
         var progress = new Progress<ReconcileProgress>(p =>
         {
+            _reconProcessed = p.Processed; // which action is in flight, for the current-file ETA
             if (p.TotalBytes > 0)
             {
                 ProgressBar.IsIndeterminate = false;

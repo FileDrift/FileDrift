@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc16** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc17** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc17 (2026-07-02)
+
+- **ETA now recalculates for the final file during a "Finish current" stop, instead of disappearing.** Once a soft stop is requested, the whole-plan ETA correctly stops applying (the run won't reach the rest of the plan) — but the file already in flight is still genuinely copying to completion, and knowing how much longer *it* needs is still honest and useful. The rate readout now shows "~N sec left in this file" for the remainder of that copy, computed from the same smoothed rate. A hard stop (which aborts immediately) still shows no ETA, since there's nothing being timed to completion.
 
 ### 1.0.0-rc16 (2026-07-02)
 
