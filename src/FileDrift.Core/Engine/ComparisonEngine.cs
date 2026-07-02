@@ -15,25 +15,35 @@ public sealed class ComparisonEngine
     public ComparisonEngine(TimeSpan? timestampTolerance = null) =>
         _timestampTolerance = timestampTolerance ?? DefaultTimestampTolerance;
 
-    /// <summary>Compares two record sets. Paths are matched case-insensitively (Windows semantics).</summary>
+    /// <summary>Convenience overload for plain record sets: builds the path-keyed maps and delegates.
+    /// Duplicate relative paths collapse last-wins (shouldn't occur in real enumerations).</summary>
     public IReadOnlyList<ComparisonResult> Compare(
         IReadOnlyCollection<FileRecord> source,
         IReadOnlyCollection<FileRecord> dest,
         VerifyOptions options)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
-        var destByPath = new Dictionary<string, FileRecord>(comparer);
-        foreach (var d in dest)
-            destByPath[d.RelativePath] = d; // last-wins on dup paths (shouldn't occur)
+        var srcByPath = new Dictionary<string, FileRecord>(source.Count, comparer);
+        foreach (var s in source) srcByPath[s.RelativePath] = s;
+        var destByPath = new Dictionary<string, FileRecord>(dest.Count, comparer);
+        foreach (var d in dest) destByPath[d.RelativePath] = d;
+        return Compare(srcByPath, destByPath, options);
+    }
 
+    /// <summary>Compares two record sets already keyed by relative path (as the verify pipeline holds
+    /// them), avoiding any rebuild or copy of million-entry structures. Both dictionaries MUST be keyed
+    /// case-insensitively (Windows path semantics). The dictionaries are not modified.</summary>
+    public IReadOnlyList<ComparisonResult> Compare(
+        IReadOnlyDictionary<string, FileRecord> source,
+        IReadOnlyDictionary<string, FileRecord> dest,
+        VerifyOptions options)
+    {
         var results = new List<ComparisonResult>(source.Count);
-        var matchedDestPaths = new HashSet<string>(comparer);
 
-        foreach (var s in source)
+        foreach (var s in source.Values)
         {
-            if (destByPath.TryGetValue(s.RelativePath, out var d))
+            if (dest.TryGetValue(s.RelativePath, out var d))
             {
-                matchedDestPaths.Add(s.RelativePath);
                 var diff = ComputeDifferences(s, d, options, out var aclDetail);
                 results.Add(new ComparisonResult
                 {
@@ -56,9 +66,11 @@ public sealed class ComparisonEngine
             }
         }
 
-        foreach (var d in dest)
+        // Extras: anything on dest with no source counterpart. The source map answers that directly,
+        // so no matched-paths set needs to be built and carried through the first pass.
+        foreach (var d in dest.Values)
         {
-            if (!matchedDestPaths.Contains(d.RelativePath))
+            if (!source.ContainsKey(d.RelativePath))
                 results.Add(new ComparisonResult
                 {
                     RelativePath = d.RelativePath,

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-using System.Collections.Concurrent;
 using System.Net;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
@@ -76,10 +75,11 @@ public sealed class VerifyEngine
             if (options.Depth >= VerifyDepth.Full || options.IncludeAcl)
                 await EnrichMatchedPairsAsync(source, dest, options, progress, cancellationToken);
 
-            // Phase 4 — compare. Strict mode uses zero timestamp tolerance (exact match).
+            // Phase 4 — compare. Strict mode uses zero timestamp tolerance (exact match). The maps are
+            // passed straight through — no .Values.ToArray() copies, no rebuild inside Compare.
             progress?.Report(new VerifyProgress { Phase = VerifyPhase.Comparing, Message = "Comparing trees" });
             var comparer = options.Strict ? new ComparisonEngine(TimeSpan.Zero) : _comparison;
-            var comparisons = comparer.Compare(source.Values.ToArray(), dest.Values.ToArray(), options);
+            var comparisons = comparer.Compare(source, dest, options);
 
             // End (upper bound), ASYMMETRIC: drop destination-only files newer than End (post-migration
             // noise). Files present on both sides are kept and compared regardless of age. The Start
@@ -152,14 +152,17 @@ public sealed class VerifyEngine
         }
     }
 
-    private async Task<ConcurrentDictionary<string, FileRecord>> EnumerateAsync(
+    private async Task<Dictionary<string, FileRecord>> EnumerateAsync(
         string rootPath,
         VerifyOptions options,
         VerifyPhase phase,
         IProgress<VerifyProgress>? progress,
         CancellationToken ct)
     {
-        var map = new ConcurrentDictionary<string, FileRecord>(StringComparer.OrdinalIgnoreCase);
+        // Plain Dictionary: this loop is the only writer, and enrichment computes in parallel but
+        // writes back single-threaded — a ConcurrentDictionary cost an extra node allocation per entry
+        // plus lock overhead, which is real memory/CPU at millions of records.
+        var map = new Dictionary<string, FileRecord>(StringComparer.OrdinalIgnoreCase);
         var excludes = new GlobMatcher(options.ExcludePatterns);
         long count = 0, skippedOld = 0;
 
@@ -190,8 +193,8 @@ public sealed class VerifyEngine
     }
 
     private async Task EnrichMatchedPairsAsync(
-        ConcurrentDictionary<string, FileRecord> source,
-        ConcurrentDictionary<string, FileRecord> dest,
+        Dictionary<string, FileRecord> source,
+        Dictionary<string, FileRecord> dest,
         VerifyOptions options,
         IProgress<VerifyProgress>? progress,
         CancellationToken ct)
@@ -207,8 +210,13 @@ public sealed class VerifyEngine
             CancellationToken = ct,
         };
 
-        await Parallel.ForEachAsync(matchedPaths, parallel, async (path, token) =>
+        // The parallel phase only READS the dictionaries (safe with no concurrent writer) and deposits
+        // each pair's enriched records into its own slot; the write-back below is single-threaded.
+        var enriched = new (FileRecord Source, FileRecord Dest)[matchedPaths.Length];
+
+        await Parallel.ForAsync(0, matchedPaths.Length, parallel, async (i, token) =>
         {
+            var path = matchedPaths[i];
             var s = source[path];
             var d = dest[path];
 
@@ -219,8 +227,12 @@ public sealed class VerifyEngine
             // Only hash files (not directories) whose sizes match — a size mismatch is already definitive.
             if (doHash && !s.IsDirectory && s.SizeBytes == d.SizeBytes)
             {
-                sHash = await _hasher.TryComputeHashAsync(s.FullPath, options.HashAlgorithm, token);
-                dHash = await _hasher.TryComputeHashAsync(d.FullPath, options.HashAlgorithm, token);
+                // Hash the two sides concurrently: they're usually different devices (share vs local
+                // disk), so the slower side hides behind the faster one instead of adding to it.
+                var sTask = _hasher.TryComputeHashAsync(s.FullPath, options.HashAlgorithm, token);
+                var dTask = _hasher.TryComputeHashAsync(d.FullPath, options.HashAlgorithm, token);
+                sHash = await sTask;
+                dHash = await dTask;
             }
 
             // Folders-only scope skips reading file ACLs (the bulk of the SMB round-trips).
@@ -233,8 +245,8 @@ public sealed class VerifyEngine
                 dOwner = AclReader.ExtractOwner(dSddl);
             }
 
-            source[path] = s with { Hash = sHash, SecurityDescriptor = sSddl, Owner = sOwner };
-            dest[path]   = d with { Hash = dHash, SecurityDescriptor = dSddl, Owner = dOwner };
+            enriched[i] = (s with { Hash = sHash, SecurityDescriptor = sSddl, Owner = sOwner },
+                           d with { Hash = dHash, SecurityDescriptor = dSddl, Owner = dOwner });
 
             long n = Interlocked.Increment(ref processed);
             if (n % 200 == 0)
@@ -246,6 +258,12 @@ public sealed class VerifyEngine
                     Message = $"{(doHash ? "Hashing" : "Reading ACLs on")} matched pairs ({n:N0}/{matchedPaths.Length:N0})",
                 });
         });
+
+        for (int i = 0; i < matchedPaths.Length; i++)
+        {
+            source[matchedPaths[i]] = enriched[i].Source;
+            dest[matchedPaths[i]]   = enriched[i].Dest;
+        }
 
         progress?.Report(new VerifyProgress
         {

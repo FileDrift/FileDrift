@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc11** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc12** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,13 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc12 (2026-07-01)
+
+- **Compare-pipeline and hashing efficiency (Tier 2 of the pre-release optimization review).** No behavior changes — same records, same verdicts, verified by the full test suite and an end-to-end full-depth run:
+  - **The verify pipeline no longer copies or rebuilds its million-entry structures.** Enumeration now fills plain dictionaries (hash/ACL enrichment computes in parallel but writes back single-threaded, so the heavier concurrent collections aren't needed), and the comparison consumes those dictionaries directly instead of receiving array copies and rebuilding its own destination index. On large runs this removes two full copies, one full dictionary rebuild, and a matched-paths set — a substantial transient-memory and CPU reduction.
+  - **Both sides of a matched pair are now hashed concurrently.** Source and destination are usually different devices (share vs. local disk), so the slower side hides behind the faster one instead of adding to it — up to ~2× on full-depth verifies whose sides have unequal speeds.
+  - **Hashing uses the one-shot `HashDataAsync` API** (no per-file `HashAlgorithm` allocation) and opens files with a sequential-scan hint, improving read-ahead and keeping large files from polluting the file cache.
 
 ### 1.0.0-rc11 (2026-07-01)
 

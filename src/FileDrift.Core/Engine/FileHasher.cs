@@ -17,21 +17,22 @@ public sealed class FileHasher
     {
         try
         {
-            using var algo = Create(algorithm);
+            // SequentialScan: hashing reads front-to-back once — the hint improves read-ahead and keeps
+            // large files from polluting the cache. Static one-shot HashDataAsync avoids allocating a
+            // HashAlgorithm instance per file (this runs once or twice per matched pair).
             await using var stream = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
-            var hash = await algo.ComputeHashAsync(stream, cancellationToken);
+                path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            byte[] hash = algorithm switch
+            {
+                FileDriftHashAlgorithm.MD5    => await MD5.HashDataAsync(stream, cancellationToken),
+                FileDriftHashAlgorithm.SHA1   => await SHA1.HashDataAsync(stream, cancellationToken),
+                FileDriftHashAlgorithm.SHA256 => await SHA256.HashDataAsync(stream, cancellationToken),
+                _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "Unsupported hash algorithm."),
+            };
             return Convert.ToHexString(hash);
         }
         catch (IOException) { return null; }
         catch (UnauthorizedAccessException) { return null; }
     }
-
-    private static HashAlgorithm Create(FileDriftHashAlgorithm algorithm) => algorithm switch
-    {
-        FileDriftHashAlgorithm.MD5    => MD5.Create(),
-        FileDriftHashAlgorithm.SHA1   => SHA1.Create(),
-        FileDriftHashAlgorithm.SHA256 => SHA256.Create(),
-        _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "Unsupported hash algorithm."),
-    };
 }
