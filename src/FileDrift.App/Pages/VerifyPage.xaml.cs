@@ -558,15 +558,24 @@ public partial class VerifyPage : Page
                 primaryDanger: true);
 
             if (choice == Wpf.Ui.Controls.MessageBoxResult.Primary)
-            { _stopMode = StopMode.Hard; _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
+            {
+                _stopMode = StopMode.Hard; _cts?.Cancel();
+                StatusText.Text = "Stopping now…";
+                AppendLog("Stop requested – aborting the current file and removing its partial copy.");
+            }
             else if (choice == Wpf.Ui.Controls.MessageBoxResult.Secondary)
-            { _stopMode = StopMode.Soft; _softStop?.Cancel(); StatusText.Text = "Finishing the current file, then stopping…"; }
+            {
+                _stopMode = StopMode.Soft; _softStop?.Cancel();
+                StatusText.Text = "Finishing the current file, then stopping…";
+                AppendLog("Stop requested – finishing the current file, then stopping.");
+            }
             // None (close/escape) → keep going
         }
         else
         {
             _cts?.Cancel();
             StatusText.Text = "Cancelling…";
+            AppendLog("Cancel requested.");
         }
     }
 
@@ -588,9 +597,17 @@ public partial class VerifyPage : Page
             primaryDanger: true);
 
         if (choice == Wpf.Ui.Controls.MessageBoxResult.Primary)
-        { _stopMode = StopMode.Hard; _cts?.Cancel(); StatusText.Text = "Stopping now…"; }
+        {
+            _stopMode = StopMode.Hard; _cts?.Cancel();
+            StatusText.Text = "Stopping now…";
+            AppendLog("Stop requested (closing) – aborting the current file and removing its partial copy.");
+        }
         else if (choice == Wpf.Ui.Controls.MessageBoxResult.Secondary)
-        { _stopMode = StopMode.Soft; _softStop?.Cancel(); StatusText.Text = "Finishing the current file, then stopping…"; }
+        {
+            _stopMode = StopMode.Soft; _softStop?.Cancel();
+            StatusText.Text = "Finishing the current file, then stopping…";
+            AppendLog("Stop requested (closing) – finishing the current file, then stopping.");
+        }
         else
             return false; // Continue → keep running, don't close
 

@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc15** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0-rc16** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
 
 **Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
 
@@ -186,6 +186,10 @@ Public Windows release binaries of FileDrift are code-signed by [SignPath.io](ht
 ## Changelog
 
 Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+
+### 1.0.0-rc16 (2026-07-02)
+
+- **Cancel now logs an acknowledgement immediately, not just at completion.** Choosing *Stop now* or *Finish current* during a reconcile updated the status line above the log, but the Activity Log itself stayed silent until the stop actually finished (the partial-file cleanup or "last file copied" line) — with a large in-flight file, that could be a long wait with no record that anything had been requested. A line is now appended to the Activity Log (and the run's log file) the moment the stop is requested, for both the in-app cancel and the equivalent close-while-reconciling prompt.
 
 ### 1.0.0-rc15 (2026-07-02)
 
