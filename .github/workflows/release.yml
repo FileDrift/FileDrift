@@ -9,10 +9,13 @@
 
 name: Release (build + SignPath sign)
 
+# Manual trigger only until SignPath is actually configured (see the TODOs below) -- the
+# `release: types: [published]` trigger was removed because it fired this workflow on every
+# published GitHub Release and always failed at the signing step (empty organization-id, no
+# SIGNPATH_API_TOKEN secret), sending a spurious "workflow failed" email for a release that
+# otherwise succeeded fine. Once SignPath is set up, restore that trigger below.
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   build-and-sign:
