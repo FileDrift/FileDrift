@@ -20,11 +20,13 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0-rc21** — feature complete for local-filesystem and SMB verify/reconcile; in release-candidate testing.
+Current version: **1.0.0** — released.
 
-**Shipped toward 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification, a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and local Authenticode code signing. Relicensed to GPL-3.0-or-later ahead of any public release.
+> **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
-**Remaining before 1.0:** security review complete (rc10); cutting an actual public release remains (signing via an internal CA now, SignPath Foundation pending approval for public-trust signing). When setting up SignPath, pin the actions in `.github/workflows/release.yml` (`SignPath/github-action-submit-signing-request`, `actions/checkout`, `actions/upload-artifact`, `actions/setup-dotnet`) to full commit SHAs instead of mutable tags **before** adding the `SIGNPATH_API_TOKEN` repository secret — a hijacked action tag is the classic path to CI secret exfiltration.
+**Shipped in 1.0:** verify (MFT + SMB enumeration, quick/standard/full depth, ACL comparison), non-destructive reconcile with preview, run history with age/sign-off filtering, run sign-off (GUI + CLI, with a protected operating-account audit trail), tamper-evident HTML certificates of verification (attesting to a verify's result — not to a subsequent reconcile), a Compliance tab for single/batch certificate checks, history clear/import/export (signed-off runs are never deletable or overwritable), Windows Credential Manager integration (GUI + CLI, including clear-all), a dedicated console CLI (`FileDrift-CLI.exe`) with human-readable table output, and three rounds of performance work (SMB/MFT enumeration, compare-pipeline efficiency, double-buffered reconcile copy). Relicensed to GPL-3.0-or-later ahead of this release. A full security review (rc10) found and fixed one real issue (HTML injection into certificates via free-text fields) before release.
+
+**Next up:** a properly signed public release once SignPath Foundation approval comes through. When setting up SignPath, pin the actions in `.github/workflows/release.yml` (`SignPath/github-action-submit-signing-request`, `actions/checkout`, `actions/upload-artifact`, `actions/setup-dotnet`) to full commit SHAs instead of mutable tags **before** adding the `SIGNPATH_API_TOKEN` repository secret — a hijacked action tag is the classic path to CI secret exfiltration.
 
 **Post-1.0 (deliberately deferred):** certificate PDF export and Authenticode-signing the certificate file itself (today's SHA-256 fingerprint detects tampering but isn't a cryptographic signature); object storage and SharePoint/OneDrive targets (a real feature requiring a write abstraction, not a small addition).
 
@@ -160,6 +162,12 @@ dotnet run --project src/FileDrift.App
 
 ## Releases & signing
 
+**The 1.0.0 release binaries are unsigned.** Public-trust code signing (via SignPath Foundation, free for OSI-approved open-source projects) is still pending approval. Until that's in place:
+
+- Windows SmartScreen will likely warn on first run of a downloaded, unsigned executable — this is expected, not a sign of tampering.
+- To verify a downloaded binary hasn't been altered, compare its SHA-256 hash against the one published with the release.
+- **For internal/domain deployment**, sign the binaries yourself with your own certificate — see below. An internal CA certificate is trusted automatically on domain-joined machines, with no per-machine setup and no SmartScreen prompt.
+
 Produce self-contained, single-file release binaries (no .NET install needed on the target) with the helper script:
 
 ```
@@ -177,15 +185,19 @@ Produce self-contained, single-file release binaries (no .NET install needed on 
 
   A **self-signed** certificate also works but isn't trusted by other machines until you deploy its public key (Group Policy → Computer Config → Windows Settings → Security Settings → Public Key Policies → Trusted Publishers, and Trusted Root). That's a free, standard approach for internal line-of-business apps.
 
-- **Public releases** — publicly-trusted signing happens in CI. The [`.github/workflows/release.yml`](.github/workflows/release.yml) workflow builds the binaries and submits them to SignPath for signing (the private key lives in SignPath's HSM, never in this repo). It needs a SignPath organization/project plus a `SIGNPATH_API_TOKEN` repository secret. The cheapest paid public-trust alternative is Microsoft's Azure Trusted Signing.
+- **Public releases** — publicly-trusted signing will happen in CI once approved. The [`.github/workflows/release.yml`](.github/workflows/release.yml) workflow is scaffolded to build the binaries and submit them to SignPath for signing (the private key lives in SignPath's HSM, never in this repo), but it isn't wired up yet — it needs a SignPath organization/project, the actions pinned to commit SHAs (see Roadmap above), and a `SIGNPATH_API_TOKEN` repository secret. Until then, releases are published unsigned. The cheapest paid public-trust alternative is Microsoft's Azure Trusted Signing.
 
 ### Code signing attribution
 
-Public Windows release binaries of FileDrift are code-signed by [SignPath.io](https://about.signpath.io/), with a free code-signing certificate granted by the [SignPath Foundation](https://signpath.io/).
+Once SignPath Foundation approval is in place, public Windows release binaries of FileDrift will be code-signed by [SignPath.io](https://about.signpath.io/), with a free code-signing certificate granted by the [SignPath Foundation](https://signpath.io/). The 1.0.0 release predates this and is unsigned.
 
 ## Changelog
 
-Versioning follows `major.minor.bugfix`. The `0.x` series is pre-release; `1.0` is reserved for the first released build.
+Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build.
+
+### 1.0.0 (2026-07-13)
+
+**First release.** Promoted from 1.0.0-rc21 after a clean final test pass — no code changes from rc21, version number only. **Released unsigned**: public-trust signing via SignPath Foundation is still pending approval (see [Releases & signing](#releases--signing)); sign locally with your own certificate for internal/domain deployment in the meantime. See the `1.0.0-rc*` entries below for the full feature history (verify, reconcile, ACLs, run history, sign-off, certificates, Compliance tab, credential management, the CLI split, and three rounds of performance work), and the [Roadmap](#roadmap) section above for what's next.
 
 ### 1.0.0-rc21 (2026-07-02)
 
