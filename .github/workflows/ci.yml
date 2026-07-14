@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Build the solution and run the test suite on every push to main and every PR.
+# windows-latest because FileDrift.App targets net9.0-windows (WPF). No secrets are
+# used and the token is read-only, so a compromised action here can't exfiltrate anything.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore FileDrift.sln
+
+      # Release config so TreatWarningsAsErrors is exercised the same way a real build is.
+      - name: Build
+        run: dotnet build FileDrift.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test FileDrift.sln -c Release --no-build --verbosity normal

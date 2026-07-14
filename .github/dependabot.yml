@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Weekly dependency-update PRs. NuGet covers the app/library/test package references;
+# github-actions keeps the workflow action versions current (and, paired with commit-SHA
+# pinning, surfaces the digest bumps the security review asked for on release.yml).
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
