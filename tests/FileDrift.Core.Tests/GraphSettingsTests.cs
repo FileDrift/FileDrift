@@ -69,12 +69,79 @@ public class GraphSettingsTests
     }
 
     [Fact]
+    public void Default_settings_do_not_reach_any_non_us_endpoint()
+    {
+        // The out-of-the-box posture: commercial endpoints only, China off.
+        var s = new GraphSettings();
+        Assert.Equal(GraphCloud.Global, s.Cloud);
+        Assert.False(s.AllowChinaCloud);
+        Assert.Contains("microsoftonline.com", s.EffectiveAuthorityHost);
+        Assert.Contains("graph.microsoft.com", s.EffectiveGraphBaseUrl);
+    }
+
+    [Fact]
     public void Cloud_name_is_case_insensitive()
     {
         var s = Valid();
         s.Cloud = "usgov";
         Assert.Empty(s.Validate());
         Assert.Equal("https://graph.microsoft.us/v1.0", s.EffectiveGraphBaseUrl);
+    }
+
+    [Fact]
+    public void China_cloud_is_disabled_by_default()
+    {
+        // Not a typo-tolerance thing: connecting to a cloud under another government's jurisdiction
+        // should be a deliberate act, not something a one-word config value reaches by accident.
+        var s = Valid();
+        s.Cloud = GraphCloud.China;
+
+        var issues = s.Validate();
+        Assert.Contains(issues, i => i.Contains("disabled by default"));
+        Assert.False(s.IsConfigured);
+    }
+
+    [Fact]
+    public void China_cloud_works_when_explicitly_allowed()
+    {
+        // The support is real, not a stub — opting in must yield the correct 21Vianet endpoints.
+        var s = Valid();
+        s.Cloud = GraphCloud.China;
+        s.AllowChinaCloud = true;
+
+        Assert.Empty(s.Validate());
+        Assert.Equal("https://login.chinacloudapi.cn", s.EffectiveAuthorityHost);
+        Assert.Equal("https://microsoftgraph.chinacloudapi.cn/v1.0", s.EffectiveGraphBaseUrl);
+    }
+
+    [Fact]
+    public void The_china_gate_does_not_affect_other_clouds()
+    {
+        foreach (var cloud in new[] { GraphCloud.Global, GraphCloud.UsGov, GraphCloud.UsGovDoD })
+        {
+            var s = Valid();
+            s.Cloud = cloud;
+            Assert.Empty(s.Validate()); // AllowChinaCloud left false
+        }
+    }
+
+    [Fact]
+    public void The_china_gate_is_case_insensitive_like_other_cloud_names()
+    {
+        var s = Valid();
+        s.Cloud = "china";
+        Assert.Contains(s.Validate(), i => i.Contains("disabled by default"));
+    }
+
+    [Fact]
+    public void Error_messages_do_not_advertise_the_disabled_cloud()
+    {
+        // Suggesting "use Global, UsGov, UsGovDoD, or China" and then rejecting China would be a
+        // confusing loop.
+        var s = Valid();
+        s.Cloud = "Atlantis";
+        var message = Assert.Single(s.Validate());
+        Assert.DoesNotContain("China", message);
     }
 
     [Fact]

@@ -8,7 +8,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>FileDrift-CLI</AssemblyName>
     <RootNamespace>FileDrift.Cli</RootNamespace>
-    <Version>1.1.0-dev2</Version>
+    <Version>1.1.0-dev3</Version>
   </PropertyGroup>
 
   <ItemGroup>

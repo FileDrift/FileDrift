@@ -22,9 +22,16 @@ public sealed class GraphSettings
     public string[] Scopes { get; set; } = ["Files.Read.All", "Sites.Read.All"];
 
     /// <summary>Which Microsoft cloud the tenant lives in: <c>Global</c> (default, commercial),
-    /// <c>UsGov</c> (GCC High), <c>UsGovDoD</c>, or <c>China</c>. Government tenants are not on the
-    /// commercial endpoints, so this has to be settable rather than hard-coded.</summary>
+    /// <c>UsGov</c> (GCC High), or <c>UsGovDoD</c>. Government tenants are not on the commercial
+    /// endpoints, so this has to be settable rather than hard-coded. <c>China</c> is also
+    /// implemented but disabled unless <see cref="AllowChinaCloud"/> is set.</summary>
     public string Cloud { get; set; } = GraphCloud.Global;
+
+    /// <summary>Opt-in required to select the China (21Vianet) cloud. The endpoints are implemented
+    /// and correct, but off by default: FileDrift's users are predominantly US public-sector, where
+    /// connecting to a cloud under another government's jurisdiction should be a deliberate,
+    /// auditable choice rather than something reachable by a one-word config typo.</summary>
+    public bool AllowChinaCloud { get; set; }
 
     /// <summary>Overrides the login authority host derived from <see cref="Cloud"/>. Normally null —
     /// an escape hatch for a cloud FileDrift doesn't know about.</summary>
@@ -93,8 +100,11 @@ public sealed class GraphSettings
             issues.Add("Scopes is empty — at least one delegated Graph scope is required.");
 
         if (!GraphCloud.IsKnown(Cloud) && string.IsNullOrWhiteSpace(AuthorityHostOverride))
-            issues.Add($"Cloud '{Cloud}' is not recognized. Use {GraphCloud.KnownList}, " +
+            issues.Add($"Cloud '{Cloud}' is not recognized. Use {GraphCloud.EnabledList}, " +
                        "or set AuthorityHostOverride and GraphBaseUrlOverride explicitly.");
+        else if (GraphCloud.IsChina(Cloud) && !AllowChinaCloud)
+            issues.Add("Cloud 'China' (21Vianet) is disabled by default. If you genuinely operate in " +
+                       "that tenant, set \"AllowChinaCloud\": true in graph.json to enable it.");
 
         if (PageSize is < 1 or > 999)
             issues.Add($"PageSize {PageSize} is out of range (1–999).");
@@ -112,12 +122,22 @@ public static class GraphCloud
     public const string Global = "Global";
     public const string UsGov = "UsGov";
     public const string UsGovDoD = "UsGovDoD";
+
+    /// <summary>China (21Vianet). Fully implemented, but gated behind
+    /// <see cref="GraphSettings.AllowChinaCloud"/> — see that property for why.</summary>
     public const string China = "China";
 
-    public static string KnownList => $"{Global}, {UsGov}, {UsGovDoD}, or {China}";
+    /// <summary>Clouds selectable without an explicit opt-in. Used in error messages, so it should
+    /// not advertise a cloud the user would then be told is disabled.</summary>
+    public static string EnabledList => $"{Global}, {UsGov}, or {UsGovDoD}";
 
+    /// <summary>True for any cloud FileDrift has endpoints for, including gated ones. Whether it may
+    /// actually be used is a separate question — see <see cref="GraphSettings.Validate"/>.</summary>
     public static bool IsKnown(string? cloud) =>
         cloud is not null && Names.Contains(cloud.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsChina(string? cloud) =>
+        string.Equals(cloud?.Trim(), China, StringComparison.OrdinalIgnoreCase);
 
     private static readonly string[] Names = [Global, UsGov, UsGovDoD, China];
 
