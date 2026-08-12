@@ -12,7 +12,7 @@ internal static class ReconcileCommand
         var src     = new Option<string>("--src") { Description = "Source path (local or UNC)", Required = true };
         var dst     = new Option<string>("--dst") { Description = "Destination path (local or UNC). The destination credential needs write access.", Required = true };
         var depth   = new Option<string>("--depth") { Description = "Verify depth used to decide what differs: quick | standard | full (default: standard)" };
-        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: md5, full depth only)" };
+        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 | quickxor (default: md5, full depth only). quickxor matches OneDrive/SharePoint." };
         var acl     = new Option<bool>("--acl")     { Description = "Also reconcile explicit (non-inherited) permissions — additive; never strips destination perms" };
         var ownAcl  = new Option<bool>("--enforce-ownership") { Description = "With --acl, also set the source owner where it differs" };
         var aclDirs = new Option<bool>("--acl-folders-only") { Description = "With --acl, compare/apply folder permissions only (fast)" };

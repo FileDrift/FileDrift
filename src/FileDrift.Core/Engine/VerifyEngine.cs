@@ -41,6 +41,11 @@ public sealed class VerifyEngine
         // Strict mode forces Full depth, SHA-256, and ACLs; persist what actually ran.
         options = options.AsEffective();
 
+        // Fail fast on cloud paths this build can't honestly verify, before a run record is written —
+        // otherwise a SharePoint URL falls through to the SMB scanner and produces a confusing
+        // filesystem error. Checked against the EFFECTIVE options so Strict's forced ACL is caught.
+        CloudPath.GuardSupported(sourcePath, destPath, options.IncludeAcl, options.Strict);
+
         var run = new RunRecord
         {
             Id = Guid.NewGuid(),

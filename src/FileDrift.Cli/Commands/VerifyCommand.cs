@@ -11,7 +11,7 @@ internal static class VerifyCommand
         var src     = new Option<string>("--src")   { Description = "Source path (local or UNC)", Required = true };
         var dst     = new Option<string>("--dst")   { Description = "Destination path (local or UNC)", Required = true };
         var depth   = new Option<string>("--depth") { Description = "quick | standard | full (default: standard)" };
-        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 (default: md5, full depth only)" };
+        var hash    = new Option<string>("--hash")  { Description = "md5 | sha1 | sha256 | quickxor (default: md5, full depth only). quickxor matches OneDrive/SharePoint." };
         var acl     = new Option<bool>("--acl")     { Description = "Compare explicit (non-inherited) permissions on files and folders" };
         var ownAcl  = new Option<bool>("--enforce-ownership") { Description = "With --acl, also require the owner to match" };
         var aclDirs = new Option<bool>("--acl-folders-only") { Description = "With --acl, compare folder permissions only (fast; skips file ACLs, misses file-level perms)" };
@@ -134,7 +134,9 @@ internal static class VerifyCommand
     {
         "sha1" => FileDriftHashAlgorithm.SHA1,
         "sha256" => FileDriftHashAlgorithm.SHA256,
+        // The only hash Microsoft Graph reports for OneDrive/SharePoint content.
+        "quickxor" => FileDriftHashAlgorithm.QuickXor,
         null or "" or "md5" => FileDriftHashAlgorithm.MD5,
-        _ => throw new ArgumentException($"Unknown hash '{value}'. Use md5, sha1, or sha256."),
+        _ => throw new ArgumentException($"Unknown hash '{value}'. Use md5, sha1, sha256, or quickxor."),
     };
 }

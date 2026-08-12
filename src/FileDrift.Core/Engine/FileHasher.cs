@@ -9,7 +9,11 @@ public sealed class FileHasher
 {
     private const int BufferSize = 1 << 20; // 1 MiB
 
-    /// <summary>Returns the uppercase hex hash of the file, or null if it cannot be read.</summary>
+    /// <summary>Returns the file's hash as a string, or null if it cannot be read. Encoding differs by
+    /// algorithm ON PURPOSE: uppercase hex for the cryptographic hashes, but base64 for
+    /// <see cref="FileDriftHashAlgorithm.QuickXor"/>, because that is the form Microsoft Graph reports
+    /// in <c>file.hashes.quickXorHash</c> — matching it is the whole point of supporting quickXorHash,
+    /// and converting would just mean converting back to compare.</summary>
     public async Task<string?> TryComputeHashAsync(
         string path,
         FileDriftHashAlgorithm algorithm,
@@ -23,6 +27,10 @@ public sealed class FileHasher
             await using var stream = new FileStream(
                 path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            if (algorithm == FileDriftHashAlgorithm.QuickXor)
+                return QuickXorHash.ToBase64(await QuickXorHash.ComputeAsync(stream, cancellationToken));
+
             byte[] hash = algorithm switch
             {
                 FileDriftHashAlgorithm.MD5    => await MD5.HashDataAsync(stream, cancellationToken),

@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released.
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev1**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -193,7 +193,15 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 ## Changelog
 
-Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build.
+Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
+
+### Unreleased — 1.1.0-dev1 (SharePoint/OneDrive groundwork)
+
+Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
+
+- **quickXorHash support.** Microsoft Graph reports only `quickXorHash` for OneDrive/SharePoint content — not MD5 or SHA-256 — so content comparison against the cloud is impossible without it. FileDrift can now compute it locally (`--hash quickxor`, or QuickXor in the GUI's Hash list), which is what will make a Full-depth cloud verify meaningful rather than size-and-timestamp guesswork. It is a checksum, not a cryptographic hash: fine for drift detection, never a security primitive.
+- **Cloud paths are recognized and refused with a clear reason.** A `https://…sharepoint.com/…` source or destination is now detected up front. ACL comparison against a cloud path is refused permanently — SharePoint permissions are a different model from Windows ACLs and reporting "no ACL differences" would be a false assurance — and Strict mode says so specifically, since Strict forces ACLs on. Everything else reports that cloud verification isn't implemented yet, instead of falling through to the SMB scanner and failing confusingly.
+- The Verify page's mode readout shows **SharePoint** for such paths (previously it would have mislabelled them SMB).
 
 ### 1.0.0 (2026-07-13)
 

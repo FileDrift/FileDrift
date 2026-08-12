@@ -68,10 +68,12 @@
                         ToolTip="Hash algorithm used at Full depth. MD5 is fastest and fine for drift detection; SHA-256 is strongest. Only same-size files are hashed.">
                 <ui:TextBlock Text="Hash" VerticalAlignment="Center" Margin="0,0,6,0"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <ComboBox x:Name="HashBox" Width="100" SelectedIndex="0">
+                <!-- Order must match the FileDriftHashAlgorithm enum: BuildOptions() casts SelectedIndex. -->
+                <ComboBox x:Name="HashBox" Width="110" SelectedIndex="0">
                     <ComboBoxItem Content="MD5" />
                     <ComboBoxItem Content="SHA1" />
                     <ComboBoxItem Content="SHA256" />
+                    <ComboBoxItem Content="QuickXor" ToolTip="Microsoft's quickXorHash — the hash OneDrive/SharePoint reports. Use this to compare cloud content against local files." />
                 </ComboBox>
             </StackPanel>
 

@@ -401,7 +401,12 @@ public partial class VerifyPage : Page
         if (ModeText is null) return;
         string Mode(string? p) => string.IsNullOrWhiteSpace(p)
             ? "–"
-            : SmartFileEnumerator.PredictSource(p!) == EnumerationSource.Mft ? "MFT" : "SMB";
+            : SmartFileEnumerator.PredictSource(p!) switch
+            {
+                EnumerationSource.Mft => "MFT",
+                EnumerationSource.Graph => "SharePoint",
+                _ => "SMB",
+            };
         ModeText.Text = $"Source → {Mode(SourceBox.Text)}   ·   Dest → {Mode(DestBox.Text)}";
     }
 
@@ -997,7 +1002,12 @@ public partial class VerifyPage : Page
         // Differences only — matched files live in the count tile, never the grid.
         ResultsGrid.ItemsSource = rows;
 
-        var mode = _enumerator.Source == EnumerationSource.Mft ? "MFT" : "SMB";
+        var mode = _enumerator.Source switch
+        {
+            EnumerationSource.Mft => "MFT",
+            EnumerationSource.Graph => "SharePoint",
+            _ => "SMB",
+        };
         var summary =
             $"Done ({mode}) – {run.MatchedCount:N0} matched, {run.TotalDifferences:N0} differences " +
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest entries.";

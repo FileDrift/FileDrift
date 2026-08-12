@@ -18,8 +18,14 @@ public sealed class SmartFileEnumerator : IFileEnumerator
     private EnumerationSource _lastSource = EnumerationSource.Smb;
     public EnumerationSource Source => _lastSource;
 
-    public IReadOnlyCollection<string> InaccessiblePaths =>
-        _lastSource == EnumerationSource.Mft ? _mft.InaccessiblePaths : _smb.InaccessiblePaths;
+    public IReadOnlyCollection<string> InaccessiblePaths => _lastSource switch
+    {
+        EnumerationSource.Mft => _mft.InaccessiblePaths,
+        // Graph never reaches here yet — CloudPath.GuardSupported rejects cloud paths upstream, so a
+        // Graph run can't currently produce inaccessible paths to report.
+        EnumerationSource.Graph => [],
+        _ => _smb.InaccessiblePaths,
+    };
 
     public async IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
@@ -66,10 +72,14 @@ public sealed class SmartFileEnumerator : IFileEnumerator
 
     private static bool IsLocalNtfs(string path) => PredictSource(path) == EnumerationSource.Mft;
 
-    /// <summary>Predicts which strategy a path will use: MFT for local fixed NTFS volumes, SMB otherwise.
-    /// MFT may still fall back to SMB at runtime if privileges are insufficient.</summary>
+    /// <summary>Predicts which strategy a path will use: Graph for SharePoint/OneDrive URLs, MFT for
+    /// local fixed NTFS volumes, SMB otherwise. MFT may still fall back to SMB at runtime if
+    /// privileges are insufficient.</summary>
     public static EnumerationSource PredictSource(string path)
     {
+        if (CloudPath.IsSharePoint(path))
+            return EnumerationSource.Graph;
+
         if (string.IsNullOrEmpty(path) || path.StartsWith(@"\\", StringComparison.Ordinal))
             return EnumerationSource.Smb; // UNC path
 

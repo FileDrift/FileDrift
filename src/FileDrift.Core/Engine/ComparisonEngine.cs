@@ -104,7 +104,13 @@ public sealed class ComparisonEngine
             {
                 // Null on either side means the hash could not be computed — treat as a difference
                 // (conservative: we could not prove equality).
-                if (!string.Equals(s.Hash, d.Hash, StringComparison.OrdinalIgnoreCase))
+                // quickXorHash is base64, which is CASE-SENSITIVE — comparing it case-insensitively
+                // could call two genuinely different hashes equal. Hex stays case-insensitive so a
+                // hash from a source that emits lowercase still matches.
+                var comparison = options.HashAlgorithm == FileDriftHashAlgorithm.QuickXor
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase;
+                if (!string.Equals(s.Hash, d.Hash, comparison))
                     diff |= FileDifference.Hash;
             }
         }

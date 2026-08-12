@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 namespace FileDrift.Core.Models;
 
-public enum EnumerationSource { Smb, Mft }
+/// <summary>Which strategy enumerated a tree. <see cref="Graph"/> covers SharePoint Online and
+/// OneDrive for Business (Microsoft Graph API), which is not a filesystem.</summary>
+public enum EnumerationSource { Smb, Mft, Graph }
 
 public enum RunStatus { InProgress, Completed, Failed, Cancelled }
 
@@ -15,7 +17,10 @@ public enum VerifyDepth
     Full
 }
 
-public enum FileDriftHashAlgorithm { MD5, SHA1, SHA256 }
+/// <summary><see cref="QuickXor"/> is Microsoft's quickXorHash — the only content hash Graph
+/// reports for OneDrive/SharePoint files, so it is the only algorithm that can compare cloud
+/// content against local content without downloading every file.</summary>
+public enum FileDriftHashAlgorithm { MD5, SHA1, SHA256, QuickXor }
 
 /// <summary>Which entries get their ACLs compared when ACL comparison is on.</summary>
 public enum AclScope
