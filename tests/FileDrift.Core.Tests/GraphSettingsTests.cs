@@ -74,7 +74,7 @@ public class GraphSettingsTests
         // The out-of-the-box posture: commercial endpoints only, China off.
         var s = new GraphSettings();
         Assert.Equal(GraphCloud.Global, s.Cloud);
-        Assert.False(s.AllowChinaCloud);
+        Assert.Empty(s.AllowedRestrictedClouds);
         Assert.Contains("microsoftonline.com", s.EffectiveAuthorityHost);
         Assert.Contains("graph.microsoft.com", s.EffectiveGraphBaseUrl);
     }
@@ -89,25 +89,28 @@ public class GraphSettingsTests
     }
 
     [Fact]
-    public void China_cloud_is_disabled_by_default()
+    public void Restricted_clouds_are_refused_by_default_with_a_stated_reason()
     {
-        // Not a typo-tolerance thing: connecting to a cloud under another government's jurisdiction
-        // should be a deliberate act, not something a one-word config value reaches by accident.
+        // Not typo-tolerance: reaching a foreign-operated cloud should be a deliberate act, not
+        // something a one-word config value does by accident. The message must say WHY, so the
+        // decision to override is an informed one.
         var s = Valid();
         s.Cloud = GraphCloud.China;
 
-        var issues = s.Validate();
-        Assert.Contains(issues, i => i.Contains("disabled by default"));
+        var issue = Assert.Single(s.Validate());
+        Assert.Contains("restricted by default", issue);
+        Assert.Contains("21Vianet", issue);                 // the actual reason, not just a refusal
+        Assert.Contains("AllowedRestrictedClouds", issue);  // and the exact way to override it
         Assert.False(s.IsConfigured);
     }
 
     [Fact]
-    public void China_cloud_works_when_explicitly_allowed()
+    public void A_restricted_cloud_works_when_explicitly_permitted()
     {
         // The support is real, not a stub — opting in must yield the correct 21Vianet endpoints.
         var s = Valid();
         s.Cloud = GraphCloud.China;
-        s.AllowChinaCloud = true;
+        s.AllowedRestrictedClouds = [GraphCloud.China];
 
         Assert.Empty(s.Validate());
         Assert.Equal("https://login.chinacloudapi.cn", s.EffectiveAuthorityHost);
@@ -115,22 +118,36 @@ public class GraphSettingsTests
     }
 
     [Fact]
-    public void The_china_gate_does_not_affect_other_clouds()
+    public void Permitting_one_restricted_cloud_does_not_permit_others()
+    {
+        // Guards the generalized mechanism: the allow-list is per-cloud, not a global "unlock".
+        var s = Valid();
+        s.AllowedRestrictedClouds = ["SomeOtherRestrictedCloud"];
+        s.Cloud = GraphCloud.China;
+        Assert.Contains(s.Validate(), i => i.Contains("restricted by default"));
+    }
+
+    [Fact]
+    public void Unrestricted_clouds_need_no_opt_in()
     {
         foreach (var cloud in new[] { GraphCloud.Global, GraphCloud.UsGov, GraphCloud.UsGovDoD })
         {
             var s = Valid();
             s.Cloud = cloud;
-            Assert.Empty(s.Validate()); // AllowChinaCloud left false
+            Assert.Null(GraphCloud.RestrictionFor(cloud));
+            Assert.Empty(s.Validate()); // AllowedRestrictedClouds left empty
         }
     }
 
     [Fact]
-    public void The_china_gate_is_case_insensitive_like_other_cloud_names()
+    public void The_restriction_check_is_case_insensitive_on_both_sides()
     {
         var s = Valid();
         s.Cloud = "china";
-        Assert.Contains(s.Validate(), i => i.Contains("disabled by default"));
+        Assert.Contains(s.Validate(), i => i.Contains("restricted by default"));
+
+        s.AllowedRestrictedClouds = ["CHINA"]; // permitting is case-insensitive too
+        Assert.Empty(s.Validate());
     }
 
     [Fact]

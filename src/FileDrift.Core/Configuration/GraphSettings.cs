@@ -24,14 +24,14 @@ public sealed class GraphSettings
     /// <summary>Which Microsoft cloud the tenant lives in: <c>Global</c> (default, commercial),
     /// <c>UsGov</c> (GCC High), or <c>UsGovDoD</c>. Government tenants are not on the commercial
     /// endpoints, so this has to be settable rather than hard-coded. <c>China</c> is also
-    /// implemented but disabled unless <see cref="AllowChinaCloud"/> is set.</summary>
+    /// implemented but restricted — see <see cref="AllowedRestrictedClouds"/>.</summary>
     public string Cloud { get; set; } = GraphCloud.Global;
 
-    /// <summary>Opt-in required to select the China (21Vianet) cloud. The endpoints are implemented
-    /// and correct, but off by default: FileDrift's users are predominantly US public-sector, where
-    /// connecting to a cloud under another government's jurisdiction should be a deliberate,
-    /// auditable choice rather than something reachable by a one-word config typo.</summary>
-    public bool AllowChinaCloud { get; set; }
+    /// <summary>Clouds that are restricted by default but which this deployment explicitly permits,
+    /// by name (e.g. <c>["China"]</c>). See <see cref="GraphCloud.RestrictionFor"/> for what is
+    /// restricted and why. Empty by default, so a restricted cloud is never reachable without a
+    /// deliberate edit to this file.</summary>
+    public string[] AllowedRestrictedClouds { get; set; } = [];
 
     /// <summary>Overrides the login authority host derived from <see cref="Cloud"/>. Normally null —
     /// an escape hatch for a cloud FileDrift doesn't know about.</summary>
@@ -100,11 +100,12 @@ public sealed class GraphSettings
             issues.Add("Scopes is empty — at least one delegated Graph scope is required.");
 
         if (!GraphCloud.IsKnown(Cloud) && string.IsNullOrWhiteSpace(AuthorityHostOverride))
-            issues.Add($"Cloud '{Cloud}' is not recognized. Use {GraphCloud.EnabledList}, " +
+            issues.Add($"Cloud '{Cloud}' is not recognized. Use {GraphCloud.UnrestrictedList}, " +
                        "or set AuthorityHostOverride and GraphBaseUrlOverride explicitly.");
-        else if (GraphCloud.IsChina(Cloud) && !AllowChinaCloud)
-            issues.Add("Cloud 'China' (21Vianet) is disabled by default. If you genuinely operate in " +
-                       "that tenant, set \"AllowChinaCloud\": true in graph.json to enable it.");
+        else if (GraphCloud.RestrictionFor(Cloud) is { } restriction && !PermitsRestrictedCloud(Cloud))
+            issues.Add($"Cloud '{restriction.Name}' is restricted by default: {restriction.Reason} " +
+                       $"If this deployment genuinely operates there, add \"{restriction.Name}\" to " +
+                       "AllowedRestrictedClouds in graph.json.");
 
         if (PageSize is < 1 or > 999)
             issues.Add($"PageSize {PageSize} is out of range (1–999).");
@@ -114,30 +115,40 @@ public sealed class GraphSettings
 
         return issues;
     }
+
+    /// <summary>True when <paramref name="cloud"/> appears in <see cref="AllowedRestrictedClouds"/>.</summary>
+    public bool PermitsRestrictedCloud(string? cloud) =>
+        cloud is not null &&
+        AllowedRestrictedClouds is not null &&
+        AllowedRestrictedClouds.Contains(cloud.Trim(), StringComparer.OrdinalIgnoreCase);
 }
 
-/// <summary>Endpoint sets for Microsoft's national clouds.</summary>
+/// <summary>Endpoint sets for Microsoft's national clouds. Which of them require an opt-in is
+/// decided by <see cref="CloudRestrictions"/>, which is provider-neutral so the same policy will
+/// cover AWS regions and other S3-compatible endpoints when those targets land.</summary>
 public static class GraphCloud
 {
     public const string Global = "Global";
     public const string UsGov = "UsGov";
     public const string UsGovDoD = "UsGovDoD";
 
-    /// <summary>China (21Vianet). Fully implemented, but gated behind
-    /// <see cref="GraphSettings.AllowChinaCloud"/> — see that property for why.</summary>
+    /// <summary>China (21Vianet). Fully implemented, but restricted — see
+    /// <see cref="RestrictionFor"/>.</summary>
     public const string China = "China";
 
-    /// <summary>Clouds selectable without an explicit opt-in. Used in error messages, so it should
-    /// not advertise a cloud the user would then be told is disabled.</summary>
-    public static string EnabledList => $"{Global}, {UsGov}, or {UsGovDoD}";
+    /// <summary>Clouds selectable without an opt-in. Used in error messages, so it deliberately does
+    /// not advertise a cloud the user would then be told is restricted.</summary>
+    public static string UnrestrictedList => $"{Global}, {UsGov}, or {UsGovDoD}";
 
-    /// <summary>True for any cloud FileDrift has endpoints for, including gated ones. Whether it may
-    /// actually be used is a separate question — see <see cref="GraphSettings.Validate"/>.</summary>
+    /// <summary>Returns the restriction on <paramref name="cloud"/>, or null if it is unrestricted.
+    /// Unknown clouds return null — they are rejected separately, by name.</summary>
+    public static CloudRestriction? RestrictionFor(string? cloud) =>
+        IsKnown(cloud) ? CloudRestrictions.ForMicrosoftCloud(cloud) : null;
+
+    /// <summary>True for any cloud FileDrift has endpoints for, including restricted ones. Whether it
+    /// may actually be used is a separate question — see <see cref="GraphSettings.Validate"/>.</summary>
     public static bool IsKnown(string? cloud) =>
         cloud is not null && Names.Contains(cloud.Trim(), StringComparer.OrdinalIgnoreCase);
-
-    public static bool IsChina(string? cloud) =>
-        string.Equals(cloud?.Trim(), China, StringComparison.OrdinalIgnoreCase);
 
     private static readonly string[] Names = [Global, UsGov, UsGovDoD, China];
 

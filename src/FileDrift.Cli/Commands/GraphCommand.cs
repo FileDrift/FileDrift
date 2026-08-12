@@ -33,7 +33,7 @@ internal static class GraphCommand
                     clientId = s.ClientId,
                     tenantId = s.TenantId,
                     cloud = s.Cloud,
-                    allowChinaCloud = s.AllowChinaCloud,
+                    allowedRestrictedClouds = s.AllowedRestrictedClouds,
                     authority = s.Authority,
                     graphBaseUrl = s.EffectiveGraphBaseUrl,
                     scopes = s.Scopes,
@@ -53,7 +53,7 @@ internal static class GraphCommand
     {
         var clientId = new Option<string>("--client-id") { Description = "Application (client) ID from the Azure AD app registration." };
         var tenantId = new Option<string>("--tenant-id") { Description = "Directory (tenant) ID (GUID or domain)." };
-        var cloud = new Option<string>("--cloud") { Description = $"Microsoft cloud: {GraphCloud.EnabledList}. Default Global (commercial)." };
+        var cloud = new Option<string>("--cloud") { Description = $"Microsoft cloud: {GraphCloud.UnrestrictedList}. Default Global (commercial)." };
         var scopes = new Option<string>("--scopes") { Description = "Comma-separated delegated Graph scopes. Default: Files.Read.All,Sites.Read.All" };
         var pageSize = new Option<int?>("--page-size") { Description = "Items per Graph page while enumerating (1–999)." };
         var maxRetries = new Option<int?>("--max-retries") { Description = "Retries for throttled (429) or transient Graph responses." };

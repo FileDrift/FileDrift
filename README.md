@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev3**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev4**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -110,7 +110,9 @@ FileDrift-CLI graph show          # confirms configuration and reports anything 
 
 Settings are stored in `%APPDATA%\FileDrift\graph.json` and shared with the GUI. **There is no client secret** — FileDrift signs in interactively as you (delegated permissions), so it can only ever see what your account can already see. For tenants outside the commercial cloud, set `--cloud UsGov` or `UsGovDoD`; unusual endpoints can be set explicitly in the JSON via `AuthorityHostOverride` / `GraphBaseUrlOverride`. For headless or CI use, `FILEDRIFT_GRAPH_CLIENT_ID` and `FILEDRIFT_GRAPH_TENANT_ID` override the file.
 
-**The China (21Vianet) cloud is implemented but disabled by default.** Its endpoints are correct and supported, but selecting it is refused unless you explicitly set `"AllowChinaCloud": true` in `graph.json` — there is intentionally no CLI flag for this. FileDrift's users are predominantly US public-sector, where connecting to a cloud under another government's jurisdiction should be a deliberate, auditable edit rather than something a one-word config value reaches by accident. Out of the box, no non-commercial endpoint is contacted.
+**Some cloud targets require an explicit opt-in.** A restricted target is refused unless you name it in `AllowedRestrictedClouds` in `graph.json` (there is intentionally no CLI flag — the friction makes it a deliberate, auditable edit). The refusal states the reason, so the decision to override is an informed one. Currently the only restricted target is Microsoft's **China (21Vianet)** cloud, which is operated by 21Vianet under PRC jurisdiction rather than by Microsoft; its endpoints are fully implemented and work normally once permitted. The same mechanism is provider-neutral and will cover AWS regions and other S3-compatible endpoints when those targets land.
+
+To be clear about what this is: a **guardrail against reaching a foreign-operated cloud by accident** — a mistyped region, a pasted endpoint. It is deliberately not described as sanctions screening or export-control compliance, and should not be relied on as either. Providers do not operate regions in OFAC-sanctioned countries, so such a list would never match anything while implying screening FileDrift does not perform; a cloud endpoint says nothing about where data physically resides; and explicit endpoint overrides bypass the check by design.
 
 ## Enumeration strategy
 
@@ -212,14 +214,14 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev3 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev4 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
 - **quickXorHash support.** Microsoft Graph reports only `quickXorHash` for OneDrive/SharePoint content — not MD5 or SHA-256 — so content comparison against the cloud is impossible without it. FileDrift can now compute it locally (`--hash quickxor`, or QuickXor in the GUI's Hash list), which is what will make a Full-depth cloud verify meaningful rather than size-and-timestamp guesswork. It is a checksum, not a cryptographic hash: fine for drift detection, never a security primitive.
 - **Cloud paths are recognized and refused with a clear reason.** A `https://…sharepoint.com/…` source or destination is now detected up front. ACL comparison against a cloud path is refused permanently — SharePoint permissions are a different model from Windows ACLs and reporting "no ACL differences" would be a false assurance — and Strict mode says so specifically, since Strict forces ACLs on. Everything else reports that cloud verification isn't implemented yet, instead of falling through to the SMB scanner and failing confusingly.
 - The Verify page's mode readout shows **SharePoint** for such paths (previously it would have mislabelled them SMB).
-- **Graph configuration lives in `%APPDATA%\FileDrift\graph.json`**, shared by the GUI and CLI, and is managed with `FileDrift-CLI graph show` / `graph set`. Client and tenant IDs are deliberately not compiled in — they identify one organization's Azure AD app registration, and every deployment supplies its own. There is no client secret: FileDrift signs in interactively as you (delegated), so it can only ever see what your own account can. Government tenants are supported via a `Cloud` setting (`Global`, `UsGov`, `UsGovDoD`), with explicit endpoint overrides as an escape hatch, and `FILEDRIFT_GRAPH_CLIENT_ID` / `FILEDRIFT_GRAPH_TENANT_ID` environment variables override the file for headless or CI use. The China (21Vianet) cloud is implemented but **disabled unless explicitly enabled in `graph.json`**, so no non-commercial endpoint is reachable out of the box.
+- **Graph configuration lives in `%APPDATA%\FileDrift\graph.json`**, shared by the GUI and CLI, and is managed with `FileDrift-CLI graph show` / `graph set`. Client and tenant IDs are deliberately not compiled in — they identify one organization's Azure AD app registration, and every deployment supplies its own. There is no client secret: FileDrift signs in interactively as you (delegated), so it can only ever see what your own account can. Government tenants are supported via a `Cloud` setting (`Global`, `UsGov`, `UsGovDoD`), with explicit endpoint overrides as an escape hatch, and `FILEDRIFT_GRAPH_CLIENT_ID` / `FILEDRIFT_GRAPH_TENANT_ID` environment variables override the file for headless or CI use. Cloud targets under non-US operator jurisdiction — currently only Microsoft's China (21Vianet) cloud — are **restricted unless explicitly named in `graph.json`**, via a provider-neutral mechanism intended to cover AWS regions and other S3 endpoints later. It guards against reaching such a target by accident; it is explicitly not sanctions screening.
 
 ### 1.0.0 (2026-07-13)
 
