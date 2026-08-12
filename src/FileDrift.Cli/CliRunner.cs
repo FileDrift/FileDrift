@@ -25,6 +25,7 @@ internal static class CliRunner
         root.Add(CertificateCommand.Build());
         root.Add(HistoryCommand.Build());
         root.Add(CredentialCommand.Build());
+        root.Add(GraphCommand.Build());
         return await root.Parse(args).InvokeAsync(configuration: null, cancellationToken);
     }
 }

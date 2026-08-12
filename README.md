@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev1**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev2**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -70,6 +70,8 @@ FileDrift-CLI history   [--last 10] [--src \\server\share] [--since 30d] [--sign
 FileDrift-CLI history export --out history.json [--since 90d] [--src ...] [--dst ...]
 FileDrift-CLI history import --in history.json [--overwrite]
 FileDrift-CLI history prune [--older-than 90d] [--yes]     # dry-run without --yes
+FileDrift-CLI graph show                                   # SharePoint/OneDrive configuration
+FileDrift-CLI graph set --client-id <id> --tenant-id <id>
 ```
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
@@ -94,6 +96,19 @@ FileDrift-CLI reconcile --src \\server\share --dst D:\target --yes
 To force a specific saved entry, pass `--cred-source` / `--cred-dest` with its target name (e.g. `"FileDrift:\\server\share"`). Entries are also visible and editable in the app's **Credentials** page and under Control Panel → Credential Manager. (Windows' built-in `cmdkey /generic:"FileDrift:\\server\share" /user:"DOMAIN\user"` works too.)
 
 CLI output is a **human-readable table** in an interactive console (handy for quick lookups) and **JSON** when the output is piped or redirected — so scripts always get JSON. Force either with `--table` or `--json`. Pipe the JSON to `jq` or PowerShell's `ConvertFrom-Json` for scripting.
+
+### SharePoint Online / OneDrive (in progress)
+
+> Cloud verification is **not implemented yet** — see [Roadmap](#roadmap). SharePoint/OneDrive paths are currently recognized and refused with a clear reason rather than being mistaken for a network path. The configuration below is in place ahead of it.
+
+SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
+
+```
+FileDrift-CLI graph set --client-id <application-id> --tenant-id <directory-id>
+FileDrift-CLI graph show          # confirms configuration and reports anything missing
+```
+
+Settings are stored in `%APPDATA%\FileDrift\graph.json` and shared with the GUI. **There is no client secret** — FileDrift signs in interactively as you (delegated permissions), so it can only ever see what your account can already see. For tenants outside the commercial cloud, set `--cloud UsGov`, `UsGovDoD`, or `China`; unusual endpoints can be set explicitly in the JSON via `AuthorityHostOverride` / `GraphBaseUrlOverride`. For headless or CI use, `FILEDRIFT_GRAPH_CLIENT_ID` and `FILEDRIFT_GRAPH_TENANT_ID` override the file.
 
 ## Enumeration strategy
 
@@ -195,13 +210,14 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev1 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev2 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
 - **quickXorHash support.** Microsoft Graph reports only `quickXorHash` for OneDrive/SharePoint content — not MD5 or SHA-256 — so content comparison against the cloud is impossible without it. FileDrift can now compute it locally (`--hash quickxor`, or QuickXor in the GUI's Hash list), which is what will make a Full-depth cloud verify meaningful rather than size-and-timestamp guesswork. It is a checksum, not a cryptographic hash: fine for drift detection, never a security primitive.
 - **Cloud paths are recognized and refused with a clear reason.** A `https://…sharepoint.com/…` source or destination is now detected up front. ACL comparison against a cloud path is refused permanently — SharePoint permissions are a different model from Windows ACLs and reporting "no ACL differences" would be a false assurance — and Strict mode says so specifically, since Strict forces ACLs on. Everything else reports that cloud verification isn't implemented yet, instead of falling through to the SMB scanner and failing confusingly.
 - The Verify page's mode readout shows **SharePoint** for such paths (previously it would have mislabelled them SMB).
+- **Graph configuration lives in `%APPDATA%\FileDrift\graph.json`**, shared by the GUI and CLI, and is managed with `FileDrift-CLI graph show` / `graph set`. Client and tenant IDs are deliberately not compiled in — they identify one organization's Azure AD app registration, and every deployment supplies its own. There is no client secret: FileDrift signs in interactively as you (delegated), so it can only ever see what your own account can. Government tenants are supported via a `Cloud` setting (`Global`, `UsGov`, `UsGovDoD`, `China`), with explicit endpoint overrides as an escape hatch, and `FILEDRIFT_GRAPH_CLIENT_ID` / `FILEDRIFT_GRAPH_TENANT_ID` environment variables override the file for headless or CI use.
 
 ### 1.0.0 (2026-07-13)
 
