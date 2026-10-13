@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev5**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev6**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -73,6 +73,7 @@ FileDrift-CLI history prune [--older-than 90d] [--yes]     # dry-run without --y
 FileDrift-CLI graph show                                   # SharePoint/OneDrive configuration
 FileDrift-CLI graph set --client-id <id> --tenant-id <id>
 FileDrift-CLI graph login | logout | whoami                 # Graph sign-in
+FileDrift-CLI graph sites | ls | check-hash                 # discover targets, validate hashing
 ```
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
@@ -218,7 +219,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev5 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev6 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -229,6 +230,9 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **quickXorHash is now validated against the live service.** `FileDrift-CLI graph check-hash` downloads a real file and hashes the same bytes locally, confirming FileDrift's port agrees with what Graph reports — and reporting which hash the tenant actually returns, since some endpoints give SHA-1 or SHA-256 instead. The port's unit tests only prove self-consistency; this proves agreement with Microsoft, which is what Full-depth cloud verification depends on. It exits non-zero unless it passes, so it works as a gate in a script.
+- **Site and library discovery:** `graph sites` lists the sites the signed-in account can see, `graph sites --site <url>` lists a site's document libraries, and `graph ls --site <url> [--path ...] [--library ...]` browses a library to find a verify target.
+- Graph access goes through a small `HttpClient`-based client rather than the generated SDK, honouring `Retry-After` on throttling (429 is a normal operating condition on large libraries, not an exception) and never attaching the bearer token to pre-authenticated download URLs, which point at storage infrastructure that has no need of it.
 - The Verify page's mode readout shows **SharePoint** for such paths (previously it would have mislabelled them SMB).
 - **Graph configuration lives in `%APPDATA%\FileDrift\graph.json`**, shared by the GUI and CLI, and is managed with `FileDrift-CLI graph show` / `graph set`. Client and tenant IDs are deliberately not compiled in — they identify one organization's Azure AD app registration, and every deployment supplies its own. There is no client secret: FileDrift signs in interactively as you (delegated), so it can only ever see what your own account can. Government tenants are supported via a `Cloud` setting (`Global`, `UsGov`, `UsGovDoD`), with explicit endpoint overrides as an escape hatch, and `FILEDRIFT_GRAPH_CLIENT_ID` / `FILEDRIFT_GRAPH_TENANT_ID` environment variables override the file for headless or CI use. Cloud targets under non-US operator jurisdiction — currently only Microsoft's China (21Vianet) cloud — are **restricted unless explicitly named in `graph.json`**, via a provider-neutral mechanism intended to cover AWS regions and other S3 endpoints later. It guards against reaching such a target by accident; it is explicitly not sanctions screening.
 

@@ -18,6 +18,9 @@ internal static class GraphCommand
         cmd.Add(BuildLogin());
         cmd.Add(BuildLogout());
         cmd.Add(BuildWhoami());
+        cmd.Add(BuildCheckHash());
+        cmd.Add(BuildSites());
+        cmd.Add(BuildLs());
         return cmd;
     }
 
@@ -218,6 +221,177 @@ internal static class GraphCommand
                 return tokenOk ? 0 : 1;
             }
             catch (Exception ex) { return CliOutput.Error("graph.whoami", ex.Message, ex.GetType().Name); }
+        });
+        return cmd;
+    }
+
+    private static Command BuildCheckHash()
+    {
+        var path = new Option<string>("--path")
+        {
+            Description = "Drive-relative path to a file (or a folder containing one). " +
+                          "Default: the smallest non-empty file at the root of your OneDrive.",
+        };
+
+        var site = new Option<string>("--site")
+        {
+            Description = "SharePoint site URL (e.g. https://tenant.sharepoint.com/sites/IT). Uses that " +
+                          "site's default document library. Required if the signed-in account has no OneDrive.",
+        };
+
+        var cmd = new Command("check-hash",
+            "Validate FileDrift quickXorHash against what Graph reports for a real file, by " +
+            "downloading it and hashing the same bytes locally. Full-depth cloud verification " +
+            "should not be trusted until this passes.");
+        cmd.Add(path);
+        cmd.Add(site);
+
+        cmd.SetAction(async (parseResult, ct) =>
+        {
+            try
+            {
+                var settings = GraphSettingsStore.Load();
+                var auth = new GraphAuthenticator(settings);
+                using var client = new GraphClient(auth, settings);
+
+                var r = await GraphHashCheck.RunAsync(
+                    client, parseResult.GetValue(path), parseResult.GetValue(site), ct);
+
+                CliOutput.Write(new
+                {
+                    verb = "graph.check-hash",
+                    item = r.ItemName,
+                    sizeBytes = r.SizeBytes,
+                    graphQuickXorHash = r.GraphQuickXor,
+                    graphSha1Hash = r.GraphSha1,
+                    graphSha256Hash = r.GraphSha256,
+                    computedQuickXorHash = r.ComputedQuickXor,
+                    quickXorReported = r.QuickXorReported,
+                    quickXorMatches = r.QuickXorMatches,
+                    verdict = r.Verdict,
+                });
+
+                // Non-zero unless it actually passed, so this is usable as a gate in a script.
+                return r.QuickXorMatches ? 0 : 1;
+            }
+            catch (Exception ex) { return CliOutput.Error("graph.check-hash", ex.Message, ex.GetType().Name); }
+        });
+        return cmd;
+    }
+
+    private static Command BuildSites()
+    {
+        var search = new Option<string>("--search")
+        {
+            Description = "Search term; default \"*\" lists all indexed sites you can see.",
+        };
+        var siteUrl = new Option<string>("--site")
+        {
+            Description = "Instead of searching, resolve this site URL and list its document libraries.",
+        };
+
+        var cmd = new Command("sites",
+            "Discover SharePoint sites and document libraries the signed-in account can see, to find " +
+            "the URL to use as a verify target.");
+        cmd.Add(search);
+        cmd.Add(siteUrl);
+
+        cmd.SetAction(async (parseResult, ct) =>
+        {
+            try
+            {
+                var settings = GraphSettingsStore.Load();
+                var auth = new GraphAuthenticator(settings);
+                using var client = new GraphClient(auth, settings);
+
+                if (parseResult.GetValue(siteUrl) is { Length: > 0 } url)
+                {
+                    var site = await GraphSites.ResolveSiteAsync(client, url, ct);
+                    var drives = await GraphSites.ListDrivesAsync(client, site.Id, ct);
+                    CliOutput.Write(new
+                    {
+                        verb = "graph.sites",
+                        site = site.DisplayName,
+                        webUrl = site.WebUrl,
+                        libraries = drives.Select(d => new { d.Name, d.DriveType, d.WebUrl }).ToList(),
+                    });
+                    return 0;
+                }
+
+                var sites = await GraphSites.ListSitesAsync(client, parseResult.GetValue(search) ?? "*", ct);
+                CliOutput.Write(new
+                {
+                    verb = "graph.sites",
+                    count = sites.Count,
+                    sites = sites.Select(x => new { x.DisplayName, x.WebUrl }).ToList(),
+                });
+                return 0;
+            }
+            catch (Exception ex) { return CliOutput.Error("graph.sites", ex.Message, ex.GetType().Name); }
+        });
+        return cmd;
+    }
+
+    private static Command BuildLs()
+    {
+        var siteUrl = new Option<string>("--site") { Description = "SharePoint site URL." };
+        var path = new Option<string>("--path") { Description = "Folder path within the library. Default: the library root." };
+        var library = new Option<string>("--library") { Description = "Document library name. Default: the site's default library." };
+
+        var cmd = new Command("ls",
+            "List the contents of a SharePoint document library folder, to find the path to verify against.");
+        foreach (var o in new Option[] { siteUrl, path, library }) cmd.Add(o);
+
+        cmd.SetAction(async (parseResult, ct) =>
+        {
+            try
+            {
+                var url = parseResult.GetValue(siteUrl);
+                if (string.IsNullOrWhiteSpace(url))
+                    return CliOutput.Error("graph.ls", "--site is required.", "ArgumentException");
+
+                var settings = GraphSettingsStore.Load();
+                using var client = new GraphClient(new GraphAuthenticator(settings), settings);
+
+                var site = await GraphSites.ResolveSiteAsync(client, url!, ct);
+
+                GraphSites.DriveInfo drive;
+                if (parseResult.GetValue(library) is { Length: > 0 } wanted)
+                {
+                    var drives = await GraphSites.ListDrivesAsync(client, site.Id, ct);
+                    drive = drives.FirstOrDefault(d =>
+                                string.Equals(d.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                        ?? throw new GraphAuthException(
+                            $"No library named \"{wanted}\" in {site.WebUrl}. Available: " +
+                            string.Join(", ", drives.Select(d => d.Name)));
+                }
+                else
+                {
+                    drive = await GraphSites.DefaultDriveAsync(client, site.Id, ct);
+                }
+
+                var children = await GraphSites.ListChildrenAsync(
+                    client, drive.Id, parseResult.GetValue(path), ct);
+
+                CliOutput.Write(new
+                {
+                    verb = "graph.ls",
+                    site = site.DisplayName,
+                    library = drive.Name,
+                    path = parseResult.GetValue(path) ?? "/",
+                    count = children.Count,
+                    items = children.Select(i => new
+                    {
+                        Name = DriveItemJson.Name(i),
+                        Kind = DriveItemJson.IsFolder(i) ? "folder" : "file",
+                        SizeBytes = DriveItemJson.Size(i),
+                        LastModifiedUtc = DriveItemJson.LastModifiedUtc(i),
+                        QuickXorHash = DriveItemJson.Hashes(i).QuickXor,
+                    }).ToList(),
+                });
+                return 0;
+            }
+            catch (Exception ex) { return CliOutput.Error("graph.ls", ex.Message, ex.GetType().Name); }
         });
         return cmd;
     }
