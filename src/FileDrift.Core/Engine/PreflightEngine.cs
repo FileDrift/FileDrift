@@ -89,7 +89,10 @@ public sealed class PreflightEngine
         IProgress<VerifyProgress>? progress,
         CancellationToken ct)
     {
-        if (!Directory.Exists(path))
+        // Directory.Exists is meaningless for a cloud target -- a SharePoint URL is not a filesystem
+        // path -- and would report a false "not found". For those, reachability is established by the
+        // enumeration below, whose Graph errors surface through the catch blocks instead.
+        if (!CloudPath.IsSharePoint(path) && !Directory.Exists(path))
         {
             issues.Add($"[ERROR] {label} path not found or inaccessible: {path}");
             return (false, null, null);
@@ -129,5 +132,16 @@ public sealed class PreflightEngine
             issues.Add($"[ERROR] {label} IO error: {ex.Message}");
             return (false, null, null);
         }
+        catch (Exception ex) when (IsCloudFailure(ex))
+        {
+            // Sign-in, permission, and bad-path failures against Graph are the cloud equivalent of the
+            // filesystem cases above: report them as a preflight issue rather than letting them abort
+            // the whole check, since the point of preflight is to list what is wrong.
+            issues.Add($"[ERROR] {label} not reachable: {ex.Message}");
+            return (false, null, null);
+        }
     }
+
+    private static bool IsCloudFailure(Exception ex) =>
+        ex is Cloud.GraphAuthException or Cloud.GraphApiException;
 }

@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev6**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev7**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -101,7 +101,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> Cloud verification is **not implemented yet** — see [Roadmap](#roadmap). SharePoint/OneDrive paths are currently recognized and refused with a clear reason rather than being mistaken for a network path. The configuration below is in place ahead of it.
+> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev7: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -219,7 +219,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev6 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev7 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -230,6 +230,11 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **SharePoint/OneDrive enumeration (`GraphFileEnumerator`).** A SharePoint URL can now be the source or destination of a verify or preflight, compared on name, size, timestamp, and — at Full depth with `--hash quickxor` — content. Files only, matching MFT behaviour: the SMB scanner emits directory records only to compare ACLs, which is refused for cloud, so an empty folder is not an entry.
+  - URL resolution asks the tenant rather than parsing: given `/sites/IT/Shared Documents/Payroll` there is no local way to know where the site path ends and the library begins, and a library's URL segment ("Shared Documents") routinely differs from its Graph name ("Documents").
+  - Timestamps prefer `fileSystemInfo.lastModifiedDateTime`, which carries the **original** file time when an uploader sets it, over the item's own `lastModifiedDateTime`, which only records when SharePoint last changed.
+  - Content hashes arrive inline with enumeration, so a Full-depth cloud verify costs **no extra request per file**.
+  - A permission failure on one subtree is recorded as inaccessible and the scan continues, which drives the certificate verdict to INCOMPLETE rather than letting a partial scan resemble a clean match.
 - **quickXorHash is now validated against the live service.** `FileDrift-CLI graph check-hash` downloads a real file and hashes the same bytes locally, confirming FileDrift's port agrees with what Graph reports — and reporting which hash the tenant actually returns, since some endpoints give SHA-1 or SHA-256 instead. The port's unit tests only prove self-consistency; this proves agreement with Microsoft, which is what Full-depth cloud verification depends on. It exits non-zero unless it passes, so it works as a gate in a script.
 - **Site and library discovery:** `graph sites` lists the sites the signed-in account can see, `graph sites --site <url>` lists a site's document libraries, and `graph ls --site <url> [--path ...] [--library ...]` browses a library to find a verify target.
 - Graph access goes through a small `HttpClient`-based client rather than the generated SDK, honouring `Retry-After` on throttling (429 is a normal operating condition on large libraries, not an exception) and never attaching the bearer token to pre-authenticated download URLs, which point at storage infrastructure that has no need of it.

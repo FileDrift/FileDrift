@@ -44,10 +44,5 @@ public static class CloudPath
                   "are a different model from Windows ACLs and cannot be meaningfully compared. Turn ACL " +
                   "comparison off for this run.");
         }
-
-        // Temporary: lifted once the Graph enumerator lands.
-        throw new NotSupportedException(
-            "SharePoint/OneDrive paths are recognized but not yet supported for verification. " +
-            "This build only detects them so they fail clearly instead of being treated as a network path.");
     }
 }

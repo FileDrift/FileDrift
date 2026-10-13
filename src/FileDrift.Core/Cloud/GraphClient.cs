@@ -209,6 +209,19 @@ public static class DriveItemJson
     public static long Size(JsonNode? item) =>
         item?["size"] is { } size && size.GetValueKind() == JsonValueKind.Number ? size.GetValue<long>() : 0L;
 
+    /// <summary>Creation time from <c>fileSystemInfo</c>, preferring the original file time an
+    /// uploader set over the item's own createdDateTime, for the same reason as
+    /// <see cref="LastModifiedUtc"/>.</summary>
+    public static DateTime? CreatedUtc(JsonNode? item)
+    {
+        var raw = item?["fileSystemInfo"]?["createdDateTime"]?.GetValue<string>()
+                  ?? item?["createdDateTime"]?.GetValue<string>();
+        return DateTime.TryParse(raw, CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : null;
+    }
+
     /// <summary>Last-modified time from <c>fileSystemInfo</c> in preference to the item's own
     /// <c>lastModifiedDateTime</c>: the former carries the ORIGINAL file time when an uploader sets it,
     /// while the latter reflects when the item changed in SharePoint.</summary>

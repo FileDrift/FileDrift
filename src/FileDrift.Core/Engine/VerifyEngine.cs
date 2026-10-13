@@ -232,16 +232,29 @@ public sealed class VerifyEngine
             // Only hash files (not directories) whose sizes match — a size mismatch is already definitive.
             if (doHash && !s.IsDirectory && s.SizeBytes == d.SizeBytes)
             {
+                // A record that ALREADY carries a hash keeps it. A cloud enumerator attaches the hash
+                // the service reported (Graph returns quickXorHash inline in listings), and its
+                // FullPath is a browser URL, not an openable file — handing it to the hasher would
+                // fail every time. Checking for a hash rather than the source kind also means any
+                // future pre-hashing enumerator benefits without touching this.
+                var sTask = s.Hash is null
+                    ? _hasher.TryComputeHashAsync(s.FullPath, options.HashAlgorithm, token)
+                    : Task.FromResult<string?>(s.Hash);
+                var dTask = d.Hash is null
+                    ? _hasher.TryComputeHashAsync(d.FullPath, options.HashAlgorithm, token)
+                    : Task.FromResult<string?>(d.Hash);
                 // Hash the two sides concurrently: they're usually different devices (share vs local
                 // disk), so the slower side hides behind the faster one instead of adding to it.
-                var sTask = _hasher.TryComputeHashAsync(s.FullPath, options.HashAlgorithm, token);
-                var dTask = _hasher.TryComputeHashAsync(d.FullPath, options.HashAlgorithm, token);
                 sHash = await sTask;
                 dHash = await dTask;
             }
 
             // Folders-only scope skips reading file ACLs (the bulk of the SMB round-trips).
-            bool readAcl = doAcl && (options.AclScope == AclScope.FilesAndFolders || s.IsDirectory);
+            // Cloud records never carry an SDDL and their FullPath is not a filesystem path, so ACL
+            // reading is skipped for them. CloudPath.GuardSupported already refuses an ACL run against
+            // a cloud path, making this belt-and-braces rather than the primary defence.
+            bool readAcl = doAcl && (options.AclScope == AclScope.FilesAndFolders || s.IsDirectory)
+                           && s.Source != EnumerationSource.Graph && d.Source != EnumerationSource.Graph;
             if (readAcl)
             {
                 sSddl = _aclReader.TryGetSddl(s.FullPath);

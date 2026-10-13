@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using FileDrift.Core.Cloud;
+using FileDrift.Core.Configuration;
 using FileDrift.Core.Engine;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Persistence;
@@ -11,11 +13,24 @@ internal static class CliServices
 {
     public static IRunRepository Repository() => new SqliteRunRepository();
 
-    public static VerifyEngine Verify() => new(new SmartFileEnumerator(), Repository());
+    public static VerifyEngine Verify() => new(Enumerator(), Repository());
 
     public static ReconcileEngine Reconcile() => new();
 
-    public static PreflightEngine Preflight() => new(new SmartFileEnumerator());
+    public static PreflightEngine Preflight() => new(Enumerator());
+
+    /// <summary>A SmartFileEnumerator that can also reach SharePoint/OneDrive. The cloud enumerator is
+    /// supplied as a factory so it is only built when a cloud path is actually used -- a local run
+    /// neither pays for Graph setup nor fails because Graph is unconfigured.</summary>
+    private static SmartFileEnumerator Enumerator() => new(CreateCloudEnumerator);
+
+    private static IFileEnumerator CreateCloudEnumerator()
+    {
+        var settings = GraphSettingsStore.Load();
+        // The GraphClient owns an HttpClient; it lives as long as the enumerator, which lives as long
+        // as the run, so it is not disposed here. A CLI process is short-lived and exits after one run.
+        return new GraphFileEnumerator(new GraphClient(new GraphAuthenticator(settings), settings), settings);
+    }
 
     public static ICredentialStore Credentials() => new WindowsCredentialStore();
 

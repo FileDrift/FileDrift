@@ -14,6 +14,15 @@ public sealed class SmartFileEnumerator : IFileEnumerator
     private readonly SmbFileEnumerator _smb = new();
     private readonly MftFileEnumerator _mft = new();
 
+    // A factory, not an instance: building the cloud enumerator means loading Graph configuration and
+    // an authenticated client, and a purely local run must not pay for that -- or fail because Graph
+    // is unconfigured. Created on first use and cached, so InaccessiblePaths survives the call.
+    private readonly Func<IFileEnumerator>? _cloudFactory;
+    private IFileEnumerator? _cloud;
+
+    public SmartFileEnumerator(Func<IFileEnumerator>? cloudEnumeratorFactory = null) =>
+        _cloudFactory = cloudEnumeratorFactory;
+
     // Reflects the strategy used in the most recent EnumerateAsync call.
     private EnumerationSource _lastSource = EnumerationSource.Smb;
     public EnumerationSource Source => _lastSource;
@@ -21,9 +30,7 @@ public sealed class SmartFileEnumerator : IFileEnumerator
     public IReadOnlyCollection<string> InaccessiblePaths => _lastSource switch
     {
         EnumerationSource.Mft => _mft.InaccessiblePaths,
-        // Graph never reaches here yet — CloudPath.GuardSupported rejects cloud paths upstream, so a
-        // Graph run can't currently produce inaccessible paths to report.
-        EnumerationSource.Graph => [],
+        EnumerationSource.Graph => _cloud?.InaccessiblePaths ?? [],
         _ => _smb.InaccessiblePaths,
     };
 
@@ -33,6 +40,20 @@ public sealed class SmartFileEnumerator : IFileEnumerator
         IProgress<EnumerationProgress>? progress = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (CloudPath.IsSharePoint(rootPath))
+        {
+            _lastSource = EnumerationSource.Graph;
+            var cloud = _cloud ??= _cloudFactory?.Invoke()
+                ?? throw new NotSupportedException(
+                    "This build cannot enumerate SharePoint/OneDrive paths: no cloud enumerator was " +
+                    "supplied. (A host that supports cloud targets wires one in; this is a wiring " +
+                    "error rather than something to fix in configuration.)");
+
+            await foreach (var record in cloud.EnumerateAsync(rootPath, options, progress, cancellationToken))
+                yield return record;
+            yield break;
+        }
+
         // MFT enumeration is files-only; ACL comparison needs directory records (and is I/O-bound on
         // ACL reads anyway), so fall back to the directory-aware SMB scanner when comparing ACLs.
         if (!options.IncludeAcl && IsLocalNtfs(rootPath))

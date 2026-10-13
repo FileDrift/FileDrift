@@ -70,11 +70,13 @@ public class CloudPathTests
     }
 
     [Fact]
-    public void Guard_rejects_cloud_paths_as_not_yet_supported()
+    public void Guard_allows_a_cloud_path_when_acl_comparison_is_off()
     {
-        // Cloud detected but ACLs off — the remaining blocker is that the enumerator doesn't exist yet.
-        var ex = Assert.Throws<NotSupportedException>(() => CloudPath.GuardSupported(
-            @"C:\Source", "https://contoso.sharepoint.com/sites/IT", includeAcl: false, strict: false));
-        Assert.Contains("not yet supported", ex.Message);
+        // The enumerator now exists, so a cloud path is a legitimate target. Only the ACL rule
+        // (permanent) and the hard destination limits still block anything.
+        CloudPath.GuardSupported(
+            @"C:\Source", "https://contoso.sharepoint.com/sites/IT", includeAcl: false, strict: false);
+        CloudPath.GuardSupported(
+            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", includeAcl: false, strict: false);
     }
 }
