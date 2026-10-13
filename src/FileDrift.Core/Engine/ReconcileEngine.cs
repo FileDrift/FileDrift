@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 
 namespace FileDrift.Core.Engine;
@@ -109,8 +110,14 @@ public sealed class ReconcileEngine
         IProgress<ReconcileProgress>? progress = null,
         CancellationToken hardCancel = default,
         CancellationToken softStop = default,
-        Action<long>? onLiveBytes = null)
+        Action<long>? onLiveBytes = null,
+        IFileTarget? target = null)
     {
+        // Defaults to a local target over destPath, so existing callers are unaffected. A cloud
+        // destination supplies its own.
+        var localTarget = target as LocalFileTarget ?? (target is null ? new LocalFileTarget(destPath) : null);
+        target ??= localTarget!;
+
         const long ReportEvery = 32L * 1024 * 1024; // throttle byte progress so huge files don't flood
         var connections = new List<IDisposable>();
         int copied = 0, overwritten = 0, aclsApplied = 0, dirsCreated = 0, partialsRemoved = 0;
@@ -119,6 +126,9 @@ public sealed class ReconcileEngine
         bool stopped = false;
         string? lastCompleted = null; // last action that fully succeeded, for an accurate stop message
         var failures = new List<ReconcileFailure>();
+        // Names a target had to change to satisfy its own rules (a cloud destination rejects names
+        // Windows allows). Surfaced so the caller can disclose them rather than assume a 1:1 copy.
+        var renamed = new Dictionary<string, string>(StringComparer.Ordinal);
 
         try
         {
@@ -149,13 +159,19 @@ public sealed class ReconcileEngine
                 {
                     if (a.CreateDirectory)
                     {
-                        Directory.CreateDirectory(a.DestFullPath);
+                        await target.CreateDirectoryAsync(a.RelativePath, hardCancel);
                         dirsCreated++;
                     }
 
                     if (a.CopyContent)
                     {
-                        long actualBytes = await CopyFileAsync(a.SourceFullPath, a.DestFullPath, fileBytes =>
+                        var writeResult = await target.WriteFileAsync(new FileWriteRequest(
+                            a.RelativePath,
+                            LocalFileTarget.OpenLocalSource(a.SourceFullPath),
+                            a.SizeBytes,
+                            File.GetLastWriteTimeUtc(a.SourceFullPath),
+                            File.GetCreationTimeUtc(a.SourceFullPath),
+                            fileBytes =>
                         {
                             long now = bytes + fileBytes;
                             onLiveBytes?.Invoke(now); // every chunk — feeds the live transfer-rate readout
@@ -168,7 +184,18 @@ public sealed class ReconcileEngine
                                     Message = $"Copying {a.RelativePath}",
                                 });
                             }
-                        }, hardCancel);
+                        }), hardCancel);
+                        long actualBytes = writeResult.BytesWritten;
+
+                        // A target may have had to change the name to one it accepts (a cloud
+                        // destination rejects names Windows allows). Record it rather than assume.
+                        if (target.MayTransformNames &&
+                            !string.Equals(writeResult.FinalRelativePath, a.RelativePath, StringComparison.Ordinal))
+                            renamed[a.RelativePath] = writeResult.FinalRelativePath;
+
+                        // Attributes are a local-filesystem concern, applied after the content and
+                        // timestamps so a copied read-only flag cannot block those writes.
+                        localTarget?.TryCopyAttributes(a.SourceFullPath, a.RelativePath);
 
                         // Actual bytes copied, not the plan's size — the file may have changed since verify.
                         bytes += actualBytes;
@@ -196,7 +223,7 @@ public sealed class ReconcileEngine
                 catch (OperationCanceledException)
                 {
                     // Hard cancel mid-file: remove the partially-written destination file, then stop.
-                    if (a.CopyContent && TryDeletePartial(a.DestFullPath))
+                    if (a.CopyContent && await target.TryDeletePartialAsync(a.RelativePath, CancellationToken.None))
                     {
                         partialsRemoved++;
                         progress?.Report(new ReconcileProgress
@@ -239,16 +266,11 @@ public sealed class ReconcileEngine
             DirectoriesCreated = dirsCreated,
             Stopped = stopped,
             PartialsRemoved = partialsRemoved,
+            Renamed = renamed,
             Failures = failures,
         };
     }
 
-    private static bool TryDeletePartial(string path)
-    {
-        try { if (File.Exists(path)) { File.Delete(path); return true; } }
-        catch { /* best-effort cleanup */ }
-        return false;
-    }
 
     /// <summary>Describes what an action does, for progress/log display.</summary>
     public static string ActionVerb(ReconcileAction a)
@@ -274,39 +296,4 @@ public sealed class ReconcileEngine
     /// <paramref name="onFileBytes"/> with the running per-file byte count after each chunk (for live
     /// progress). Honors cancellation on every read and write, so a hard cancel stops promptly.
     /// Returns the actual number of bytes copied.</summary>
-    private static async Task<long> CopyFileAsync(string source, string dest, Action<long> onFileBytes, CancellationToken ct)
-    {
-        var dir = Path.GetDirectoryName(dest);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-
-        // An existing read-only destination would block FileMode.Create; clear it so the overwrite proceeds.
-        if (File.Exists(dest) && (File.GetAttributes(dest) & FileAttributes.ReadOnly) != 0)
-            File.SetAttributes(dest, File.GetAttributes(dest) & ~FileAttributes.ReadOnly);
-
-        long fileBytes;
-        await using (var src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read,
-                         BufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan))
-        await using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None,
-                         BufferSize, FileOptions.Asynchronous))
-        {
-            fileBytes = await StreamPump.PumpAsync(src, dst, onFileBytes, ct);
-        }
-
-        // Preserve source timestamps so a follow-up verify reports the pair as matched.
-        File.SetLastWriteTimeUtc(dest, File.GetLastWriteTimeUtc(source));
-
-        // Preserve creation time + user-settable attributes (best-effort; content is already copied).
-        // Set attributes LAST so a copied read-only flag doesn't block the time write above.
-        try
-        {
-            File.SetCreationTimeUtc(dest, File.GetCreationTimeUtc(source));
-            const FileAttributes copyable = FileAttributes.ReadOnly | FileAttributes.Hidden
-                | FileAttributes.System | FileAttributes.Archive;
-            File.SetAttributes(dest, File.GetAttributes(source) & copyable);
-        }
-        catch { /* metadata is best-effort — the file content and last-write time are already set */ }
-
-        return fileBytes;
-    }
 }

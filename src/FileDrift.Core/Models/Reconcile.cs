@@ -101,5 +101,12 @@ public sealed class ReconcileResult
     /// <summary>How many partially-written destination files were deleted on a hard cancel.</summary>
     public int PartialsRemoved { get; init; }
 
+    /// <summary>Source path to the name it was actually written as, for any file the destination
+    /// would not accept under its original name. Empty for a local destination, which accepts
+    /// everything a Windows source can hold. Reported so a rename is disclosed rather than silently
+    /// looking like a 1:1 copy.</summary>
+    public IReadOnlyDictionary<string, string> Renamed { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     public int FailureCount => Failures.Count;
 }
