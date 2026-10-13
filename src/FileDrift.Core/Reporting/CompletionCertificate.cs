@@ -112,6 +112,10 @@ public static class CompletionCertificate
         Line("completedAtUtc", IsoOrNull(run.CompletedAtUtc));
         Line("source", run.SourcePath);
         Line("destination", run.DestPath);
+        // Always emitted, even when empty, so the fingerprint covers the ABSENCE of a cloud identity
+        // too -- otherwise a cloud run's certificate could be made to look like a local one by
+        // stripping the line.
+        Line("cloudAccount", run.CloudAccount ?? "");
         Line("depth", run.Options.Depth.ToString());
         Line("hashAlgorithm", run.Options.HashAlgorithm.ToString());
         Line("includeAcl", run.Options.IncludeAcl ? "true" : "false");
@@ -216,6 +220,8 @@ public static class CompletionCertificate
         Row(sb, "Run ID", r.Id.ToString());
         Row(sb, "Source", r.SourcePath);
         Row(sb, "Destination", r.DestPath);
+        if (!string.IsNullOrWhiteSpace(r.CloudAccount))
+            Row(sb, "Cloud account (read as)", r.CloudAccount!);
         Row(sb, "Status", r.Status.ToString());
         Row(sb, "Started (UTC)", Iso(r.StartedAtUtc));
         Row(sb, "Completed (UTC)", IsoOrNull(r.CompletedAtUtc) is { Length: > 0 } c ? c : "—");
@@ -231,6 +237,18 @@ public static class CompletionCertificate
         Row(sb, "Differences", r.TotalDifferences.ToString("N0", CultureInfo.InvariantCulture));
         Row(sb, "Inaccessible (skipped)", r.InaccessibleCount.ToString("N0", CultureInfo.InvariantCulture));
         sb.Append("</table>\n");
+
+        // Say plainly what a delegated cloud read does and does not establish. A bare account row
+        // would leave a reader to assume the scan saw the whole library, which delegated access
+        // cannot guarantee -- and an unstated limit is the kind of false assurance this document
+        // exists to avoid.
+        if (!string.IsNullOrWhiteSpace(r.CloudAccount))
+            sb.Append("<p class=\"cloud-note\">A cloud location in this comparison was read as <code>")
+              .Append(E(r.CloudAccount!))
+              .Append("</code> using delegated access, so its scope is limited to what that account ")
+              .Append("could see. Content equality was established by the hash recorded above; ")
+              .Append("permissions were not compared, as cloud permission models have no Windows ")
+              .Append("ACL equivalent.</p>");
 
         // No Reconcile section here by design: this certificate attests to what a verify found, not to
         // what a reconcile subsequently did. Reconcile facts remain available via `report`/History.
@@ -318,6 +336,7 @@ public static class CompletionCertificate
         table.facts td { padding:4px 0; vertical-align:top; word-break:break-all; border-bottom:1px solid #eee; }
         section.signoff { margin-top:14px; }
         h2 { font-size:15px; border-bottom:1px solid var(--line); padding-bottom:5px; margin:0 0 8px; }
+        .cloud-note { font-size:11.5px; color:var(--muted); margin:7px 0 0; line-height:1.4; }
         .unsigned-note { font-size:12.5px; color:var(--bad); background:#fbeaec; border:1px solid var(--bad);
                          border-radius:6px; padding:9px 13px; }
         footer { margin-top:16px; border-top:1px solid var(--line); padding-top:10px; font-size:11.5px; color:var(--muted); }

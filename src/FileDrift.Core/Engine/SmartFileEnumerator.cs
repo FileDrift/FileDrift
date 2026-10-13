@@ -9,7 +9,7 @@ namespace FileDrift.Core.Engine;
 /// Selects MFT enumeration for local NTFS volumes and SMB enumeration for all other paths.
 /// Falls back to SMB automatically if MFT is unavailable (insufficient privileges or non-NTFS).
 /// </summary>
-public sealed class SmartFileEnumerator : IFileEnumerator
+public sealed class SmartFileEnumerator : IFileEnumerator, IEnumerationIdentity
 {
     private readonly SmbFileEnumerator _smb = new();
     private readonly MftFileEnumerator _mft = new();
@@ -26,6 +26,9 @@ public sealed class SmartFileEnumerator : IFileEnumerator
     // Reflects the strategy used in the most recent EnumerateAsync call.
     private EnumerationSource _lastSource = EnumerationSource.Smb;
     public EnumerationSource Source => _lastSource;
+
+    /// <summary>Forwarded from the cloud enumerator when one was used; null for a purely local run.</summary>
+    public string? EnumerationIdentity => (_cloud as IEnumerationIdentity)?.EnumerationIdentity;
 
     public IReadOnlyCollection<string> InaccessiblePaths => _lastSource switch
     {

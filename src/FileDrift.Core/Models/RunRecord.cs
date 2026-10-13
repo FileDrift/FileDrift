@@ -47,6 +47,14 @@ public sealed class RunRecord
 
     public long TotalDifferences => DifferentCount + MissingAtDestCount + ExtraAtDestCount;
 
+    /// <summary>The cloud identity a cloud side of this run was read as (e.g. a Graph UPN), or null if
+    /// neither side was a cloud target.
+    /// <para>Recorded for attestation, not diagnostics. Graph access is DELEGATED, so what the run
+    /// could see depends entirely on this account: a library it can only partially read would yield a
+    /// clean-looking match over a partial view. A certificate that did not name the reading identity
+    /// would therefore be asserting completeness it cannot support.</para></summary>
+    public string? CloudAccount { get; set; }
+
     /// <summary>UTC timestamp of the most recent reconcile executed against this run's differences;
     /// null if they have never been reconciled.</summary>
     public DateTime? ReconciledAtUtc { get; set; }

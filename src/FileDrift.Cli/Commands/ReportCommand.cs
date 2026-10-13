@@ -34,6 +34,8 @@ internal static class ReportCommand
                     completedAtUtc = run.CompletedAtUtc,
                     source = run.SourcePath,
                     destination = run.DestPath,
+                    // Null-omitted for a purely local run, matching the signOff/reconcile blocks.
+                    cloudAccount = run.CloudAccount,
                     options = new
                     {
                         depth = run.Options.Depth,

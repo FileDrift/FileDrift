@@ -9,7 +9,7 @@ namespace FileDrift.Core.Persistence;
 /// <summary>SQLite-backed run history. Creates and migrates its schema on construction.</summary>
 public sealed class SqliteRunRepository : IRunRepository
 {
-    private const int TargetSchemaVersion = 4;
+    private const int TargetSchemaVersion = 5;
 
     private readonly string _connectionString;
 
@@ -62,6 +62,8 @@ public sealed class SqliteRunRepository : IRunRepository
             ApplyMigration3(conn, tx);
         if (current < 4)
             ApplyMigration4(conn, tx);
+        if (current < 5)
+            ApplyMigration5(conn, tx);
 
         if (current < TargetSchemaVersion)
         {
@@ -120,6 +122,9 @@ public sealed class SqliteRunRepository : IRunRepository
         Execute(conn, tx, "ALTER TABLE runs ADD COLUMN signed_off_by_account TEXT NULL;");
     }
 
+    private static void ApplyMigration5(SqliteConnection conn, SqliteTransaction tx) =>
+        Execute(conn, tx, "ALTER TABLE runs ADD COLUMN cloud_account TEXT NULL;");
+
     private static void ApplyMigration4(SqliteConnection conn, SqliteTransaction tx)
     {
         Execute(conn, tx, "ALTER TABLE runs ADD COLUMN reconciled_at_utc TEXT NULL;");
@@ -151,14 +156,15 @@ public sealed class SqliteRunRepository : IRunRepository
                 sign_off_note, signed_off_at_utc, inaccessible_count,
                 signed_off_by, signed_off_by_account,
                 reconciled_at_utc, reconcile_bytes_copied, reconcile_files_copied,
-                reconcile_files_overwritten, reconcile_stopped)
+                reconcile_files_overwritten, reconcile_stopped, cloud_account)
             VALUES (
                 $id, $started, $src, $dst, $options,
                 $completed, $status, $totalSrc, $totalDst,
                 $matched, $different, $missing, $extra,
                 $note, $signedOff, $inaccessible,
                 $signedBy, $signedByAccount,
-                $reconciledAt, $reconBytes, $reconFilesCopied, $reconFilesOverwritten, $reconStopped)
+                $reconciledAt, $reconBytes, $reconFilesCopied, $reconFilesOverwritten, $reconStopped,
+                $cloudAccount)
             ON CONFLICT(id) DO UPDATE SET
                 started_at_utc        = excluded.started_at_utc,
                 source_path           = excluded.source_path,
@@ -181,7 +187,8 @@ public sealed class SqliteRunRepository : IRunRepository
                 reconcile_bytes_copied      = excluded.reconcile_bytes_copied,
                 reconcile_files_copied      = excluded.reconcile_files_copied,
                 reconcile_files_overwritten = excluded.reconcile_files_overwritten,
-                reconcile_stopped           = excluded.reconcile_stopped;
+                reconcile_stopped           = excluded.reconcile_stopped,
+                cloud_account               = excluded.cloud_account;
             """;
 
         AddParam(cmd, "$id",        run.Id.ToString());
@@ -207,6 +214,7 @@ public sealed class SqliteRunRepository : IRunRepository
         AddParam(cmd, "$reconFilesCopied",      run.ReconcileFilesCopied);
         AddParam(cmd, "$reconFilesOverwritten", run.ReconcileFilesOverwritten);
         AddParam(cmd, "$reconStopped",          run.ReconcileStopped ? 1 : 0);
+        AddParam(cmd, "$cloudAccount",          run.CloudAccount);
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -331,7 +339,7 @@ public sealed class SqliteRunRepository : IRunRepository
         "sign_off_note, signed_off_at_utc, inaccessible_count, " +
         "signed_off_by, signed_off_by_account, " +
         "reconciled_at_utc, reconcile_bytes_copied, reconcile_files_copied, " +
-        "reconcile_files_overwritten, reconcile_stopped";
+        "reconcile_files_overwritten, reconcile_stopped, cloud_account";
 
     private static RunRecord Map(SqliteDataReader r)
     {
@@ -360,6 +368,7 @@ public sealed class SqliteRunRepository : IRunRepository
             ReconcileFilesCopied     = r.GetInt64(20),
             ReconcileFilesOverwritten = r.GetInt64(21),
             ReconcileStopped         = r.GetInt64(22) != 0,
+            CloudAccount             = r.IsDBNull(23) ? null : r.GetString(23),
         };
     }
 

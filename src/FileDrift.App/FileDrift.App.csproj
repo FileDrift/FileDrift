@@ -10,7 +10,7 @@
     <AssemblyName>FileDrift</AssemblyName>
     <RootNamespace>FileDrift.App</RootNamespace>
     <ApplicationIcon>..\..\FileDrift.ico</ApplicationIcon>
-    <Version>1.1.0-dev7</Version>
+    <Version>1.1.0-dev8</Version>
   </PropertyGroup>
 
   <ItemGroup>

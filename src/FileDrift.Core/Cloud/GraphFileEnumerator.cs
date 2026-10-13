@@ -28,7 +28,7 @@ namespace FileDrift.Core.Cloud;
 /// token management) that buy nothing for a one-shot verify. Children listing is scoped exactly to the
 /// requested subtree and pages predictably. Delta is the right optimisation for repeat runs later.</para>
 /// </remarks>
-public sealed class GraphFileEnumerator : IFileEnumerator
+public sealed class GraphFileEnumerator : IFileEnumerator, IEnumerationIdentity
 {
     private readonly GraphClient _client;
     private readonly GraphSettings _settings;
@@ -48,6 +48,10 @@ public sealed class GraphFileEnumerator : IFileEnumerator
     /// actually read.</summary>
     public GraphTarget? ResolvedTarget { get; private set; }
 
+    /// <summary>The Graph account the most recent enumeration read as. Delegated access means this
+    /// bounds what the run could see, so it belongs in the attestation record.</summary>
+    public string? EnumerationIdentity { get; private set; }
+
     public async IAsyncEnumerable<FileRecord> EnumerateAsync(
         string rootPath,
         VerifyOptions options,
@@ -55,6 +59,8 @@ public sealed class GraphFileEnumerator : IFileEnumerator
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var inaccessible = _inaccessible = new(); // fresh per enumeration, like the SMB scanner
+        EnumerationIdentity =
+            (await _client.Tokens.GetSignedInAccountAsync(cancellationToken).ConfigureAwait(false))?.Username;
         var target = await GraphTargetResolver.ResolveAsync(_client, rootPath, cancellationToken)
             .ConfigureAwait(false);
         ResolvedTarget = target;

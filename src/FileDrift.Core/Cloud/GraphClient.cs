@@ -21,6 +21,10 @@ public sealed class GraphClient : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
 
+    /// <summary>The token provider backing this client, so callers can report which identity the
+    /// requests are made as.</summary>
+    public IGraphTokenProvider Tokens => _tokens;
+
     public GraphClient(IGraphTokenProvider tokens, GraphSettings settings, HttpClient? http = null)
     {
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));

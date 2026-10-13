@@ -73,6 +73,12 @@ public sealed class VerifyEngine
             var dest   = await EnumerateAsync(destPath, options, VerifyPhase.EnumeratingDestination, progress, cancellationToken);
             var inaccessible = sourceInaccessible.Concat(_enumerator.InaccessiblePaths).ToList();
 
+            // Record WHO a cloud side was read as. Delegated Graph access means this bounds what the
+            // run could see, so the certificate must name it or it would assert a completeness it
+            // cannot support. Null for a purely local run.
+            if (_enumerator is IEnumerationIdentity identity)
+                run.CloudAccount = identity.EnumerationIdentity;
+
             run.TotalSourceFiles = source.Count;
             run.TotalDestFiles   = dest.Count;
 
