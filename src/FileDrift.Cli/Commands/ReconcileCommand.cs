@@ -93,8 +93,12 @@ internal static class ReconcileCommand
                 }
 
                 // 4) Apply. A Ctrl-C (ct) hard-cancels: aborts the in-flight file and removes its partial.
+                // Null for a local destination, in which case the engine uses its own local target.
+                var cloudTarget = await CliServices.CloudTargetAsync(dstVal, ct);
+
                 var result = await CliServices.Reconcile().ExecuteAsync(
-                    plan, srcVal, dstVal, sourceCred, destCred, progress: null, hardCancel: ct);
+                    plan, srcVal, dstVal, sourceCred, destCred, progress: null, hardCancel: ct,
+                    target: cloudTarget);
 
                 // Record what this reconcile did on the verify run it was based on, so a certificate
                 // for that run can show it (e.g. total data copied) even after the destination has moved on.

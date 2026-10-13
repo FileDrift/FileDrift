@@ -24,6 +24,26 @@ internal static class CliServices
     /// neither pays for Graph setup nor fails because Graph is unconfigured.</summary>
     private static SmartFileEnumerator Enumerator() => new(CreateCloudEnumerator);
 
+    /// <summary>Builds a write target for a cloud destination, or null when the destination is a
+    /// local or SMB path (in which case ReconcileEngine uses its own local target).</summary>
+    public static async Task<IFileTarget?> CloudTargetAsync(string destPath, CancellationToken ct = default)
+    {
+        if (!CloudPath.IsSharePoint(destPath)) return null;
+
+        var settings = GraphSettingsStore.Load();
+        if (!settings.HasWriteScope)
+            throw new InvalidOperationException(
+                "Writing to SharePoint/OneDrive needs a write scope, but graph.json requests only " +
+                $"[{string.Join(", ", settings.Scopes ?? [])}]. Add it and sign in again:" + Environment.NewLine +
+                "  FileDrift-CLI graph set --scopes Files.ReadWrite.All,Sites.Read.All" + Environment.NewLine +
+                "  FileDrift-CLI graph login" + Environment.NewLine +
+                "The app registration must also have that delegated permission consented.");
+
+        var client = new GraphClient(new GraphAuthenticator(settings), settings);
+        var target = await GraphTargetResolver.ResolveAsync(client, destPath, ct).ConfigureAwait(false);
+        return new GraphFileTarget(client, target, settings);
+    }
+
     private static IFileEnumerator CreateCloudEnumerator()
     {
         var settings = GraphSettingsStore.Load();

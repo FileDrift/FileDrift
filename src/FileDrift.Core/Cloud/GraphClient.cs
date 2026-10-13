@@ -64,6 +64,47 @@ public sealed class GraphClient : IDisposable
         return await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Sends an arbitrary request (PUT/POST/PATCH/DELETE) with the same throttle handling as
+    /// a GET. The caller owns the returned response and must dispose it.</summary>
+    /// <param name="authenticate">False for a pre-authorised URL such as an upload session, which
+    /// carries its own authorization and is not a Graph endpoint -- attaching our bearer token would
+    /// hand a credential to infrastructure that has no need of it.</param>
+    public async Task<HttpResponseMessage> SendAsync(
+        HttpMethod method,
+        string url,
+        HttpContent? content,
+        CancellationToken cancellationToken = default,
+        bool authenticate = true)
+    {
+        // The content is read more than once if a throttled request is retried, so it is buffered
+        // into a byte array first -- an HttpContent cannot generally be resent.
+        byte[]? body = null;
+        MediaTypeHeaderValue? contentType = null;
+        ContentRangeHeaderValue? contentRange = null;
+        if (content is not null)
+        {
+            body = await content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            contentType = content.Headers.ContentType;
+            contentRange = content.Headers.ContentRange;
+        }
+
+        return await SendWithRetryAsync(
+            () =>
+            {
+                var request = new HttpRequestMessage(method, Resolve(url));
+                if (body is not null)
+                {
+                    var fresh = new ByteArrayContent(body);
+                    if (contentType is not null) fresh.Headers.ContentType = contentType;
+                    if (contentRange is not null) fresh.Headers.ContentRange = contentRange;
+                    request.Content = fresh;
+                }
+                return request;
+            },
+            authenticate,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private string Resolve(string url) =>
         url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
             ? url

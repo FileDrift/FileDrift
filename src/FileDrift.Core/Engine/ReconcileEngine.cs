@@ -204,14 +204,17 @@ public sealed class ReconcileEngine
                         if (a.Kind == ReconcileActionKind.Copy) copied++; else overwritten++;
                     }
 
+                    // ACLs apply only to a local/SMB destination: a cloud target has no SDDL and
+                    // its paths are not filesystem paths. CloudPath.GuardSupported already refuses
+                    // an ACL run against a cloud path, so this is a second line of defence.
                     bool aclTouched = false;
-                    if (a.AddExplicitAces is { Count: > 0 } aces)
+                    if (localTarget is not null && a.AddExplicitAces is { Count: > 0 } aces)
                     {
                         var err = _aclWriter.TryApplyExplicitAces(a.DestFullPath, aces);
                         if (err is null) aclTouched = true;
                         else failures.Add(new ReconcileFailure { RelativePath = a.RelativePath, Error = $"ACL: {err}" });
                     }
-                    if (a.SetOwnerSid is { } owner)
+                    if (localTarget is not null && a.SetOwnerSid is { } owner)
                     {
                         var err = _aclWriter.TrySetOwner(a.DestFullPath, owner);
                         if (err is null) aclTouched = true;

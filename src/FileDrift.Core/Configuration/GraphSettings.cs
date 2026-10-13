@@ -111,6 +111,13 @@ public sealed class GraphSettings
     public string? Authority =>
         string.IsNullOrWhiteSpace(TenantId) ? null : $"{EffectiveAuthorityHost}/{TenantId.Trim()}";
 
+    /// <summary>True when a configured scope grants write access, which uploading requires.
+    /// <para>Checked up front so a migration fails with an actionable message rather than running
+    /// for a while and then taking a 403 from Graph partway through a copy.</para></summary>
+    [JsonIgnore]
+    public bool HasWriteScope =>
+        (Scopes ?? []).Any(s => s.Contains("ReadWrite", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>True when the minimum required values are present.</summary>
     [JsonIgnore]
     public bool IsConfigured => Validate().Count == 0;

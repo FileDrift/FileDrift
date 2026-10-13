@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev10**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev11**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -101,7 +101,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev10: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev11: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -219,7 +219,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev10 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev11 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -230,6 +230,11 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **Writing to SharePoint (`IFileTarget` + `GraphFileTarget`).** `reconcile` can now copy to a SharePoint/OneDrive destination. Content up to 4 MB goes in a single request; larger files use a resumable upload session sending 320 KiB-aligned byte ranges, which is a Graph requirement rather than a tuning choice.
+  - **Source timestamps are written back explicitly.** A plain upload leaves the destination's modified time at the moment of upload, which would make a follow-up Standard-depth verify report every migrated file as timestamp-different — a successful migration looking like total drift. FileDrift sends the original times in `fileSystemInfo`.
+  - Names SharePoint rejects are transformed deterministically and the result reports where each file actually landed, so a rename is disclosed rather than silently resembling a 1:1 copy.
+  - Writing requires a write scope in `graph.json` (`Files.ReadWrite.All`). FileDrift checks this up front and tells you how to fix it, rather than running for a while and then taking a 403 partway through a copy.
+  - The write path is an abstraction (`IFileTarget`), with the existing local/SMB copy behind the same seam — so local reconcile behaviour is unchanged, which the existing cancel, cleanup, progress, and metadata tests continue to prove. ACLs stay out of the interface: they are a Windows concept with no cloud equivalent.
 - **Migration preflight for a SharePoint destination.** `preflight` now assesses every source file against the destination's rules before anything is copied, separating what is fixable from what is not. Names SharePoint rejects (reserved names such as `CON.txt`, Office `~$` lock files, `desktop.ini`, trailing dots or spaces, and the illegal character set) are reported as **renames** — a WARNING, because the transformation is deterministic and disclosed. Paths over the 400-character limit, files over the size ceiling, and extensions in a configured blocked list are reported as **cannot migrate** — an ERROR, since no renaming fixes them and the destination would not receive a faithful copy.
   - **Name collisions are detected and blocked.** Two source files can sanitize to the same destination name (`CON.txt` alongside an existing `CON_.txt`), which would silently overwrite one with the other *and* leave the verify looking clean. Preflight refuses rather than allowing that.
   - Blocked extensions are **empty by default on purpose**: that is tenant policy, not something FileDrift can discover, and a hardcoded guess would imply a check it does not perform. Set `BlockedExtensions` from your own tenant configuration.
