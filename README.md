@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev8**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev9**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -101,7 +101,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev8: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev9: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -219,7 +219,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev8 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev9 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -230,6 +230,10 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **Migration preflight for a SharePoint destination.** `preflight` now assesses every source file against the destination's rules before anything is copied, separating what is fixable from what is not. Names SharePoint rejects (reserved names such as `CON.txt`, Office `~$` lock files, `desktop.ini`, trailing dots or spaces, and the illegal character set) are reported as **renames** — a WARNING, because the transformation is deterministic and disclosed. Paths over the 400-character limit, files over the size ceiling, and extensions in a configured blocked list are reported as **cannot migrate** — an ERROR, since no renaming fixes them and the destination would not receive a faithful copy.
+  - **Name collisions are detected and blocked.** Two source files can sanitize to the same destination name (`CON.txt` alongside an existing `CON_.txt`), which would silently overwrite one with the other *and* leave the verify looking clean. Preflight refuses rather than allowing that.
+  - Blocked extensions are **empty by default on purpose**: that is tenant policy, not something FileDrift can discover, and a hardcoded guess would imply a check it does not perform. Set `BlockedExtensions` from your own tenant configuration.
+  - The sanitizing transformation is a pure, idempotent function of the path, so a later verify re-derives the destination name instead of consulting stored state — the rename list stays a report rather than data that could go stale.
 - **Certificates record the cloud identity the data was read as.** Graph access is delegated, so what a run could see is bounded by the signed-in account — a library that account can only partially read would otherwise yield a clean-looking match over a partial view. The certificate now names the account, states that its scope is limited to what that account could see, and repeats that permissions were not compared. The identity is inside the fingerprinted canonical block (emitted even when empty, so a cloud run's certificate cannot be made to resemble a local one by deleting the line), and `report` exposes it too. Schema v4→v5.
 - **SharePoint/OneDrive enumeration (`GraphFileEnumerator`).** A SharePoint URL can now be the source or destination of a verify or preflight, compared on name, size, timestamp, and — at Full depth with `--hash quickxor` — content. Files only, matching MFT behaviour: the SMB scanner emits directory records only to compare ACLs, which is refused for cloud, so an empty folder is not an entry.
   - URL resolution asks the tenant rather than parsing: given `/sites/IT/Shared Documents/Payroll` there is no local way to know where the site path ends and the library begins, and a library's URL segment ("Shared Documents") routinely differs from its Graph name ("Documents").

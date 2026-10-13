@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using FileDrift.Core.Cloud;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 
@@ -29,6 +30,14 @@ public sealed class PreflightEngine
         var issues = new List<string>();
         var connections = new List<IDisposable>();
 
+        // Source files are assessed against the DESTINATION rules, so this only applies when the
+        // destination is a cloud target. A cloud source going to a local destination has no such
+        // restrictions -- Windows accepts everything SharePoint does and more.
+        var migration = CloudPath.IsSharePoint(destPath)
+            ? new CloudMigrationPolicy(destPath, CloudLimits)
+            : null;
+        CloudMigrationReport? migrationReport = migration is null ? null : new();
+
         bool sourceOk = false, destOk = false;
         long? sourceCount = null, sourceBytes = null, destCount = null, destBytes = null;
 
@@ -38,7 +47,8 @@ public sealed class PreflightEngine
             TryConnect(connections, destPath, destCredential, "destination", issues);
 
             (sourceOk, sourceCount, sourceBytes) =
-                await ProbeAsync(sourcePath, options, VerifyPhase.EnumeratingSource, "source", issues, progress, cancellationToken);
+                await ProbeAsync(sourcePath, options, VerifyPhase.EnumeratingSource, "source", issues, progress,
+                    cancellationToken, migration, migrationReport);
             (destOk, destCount, destBytes) =
                 await ProbeAsync(destPath, options, VerifyPhase.EnumeratingDestination, "destination", issues, progress, cancellationToken);
         }
@@ -47,6 +57,9 @@ public sealed class PreflightEngine
             foreach (var connection in connections)
                 connection.Dispose();
         }
+
+        if (migrationReport is { HasFindings: true })
+            AddMigrationIssues(issues, migrationReport);
 
         progress?.Report(new VerifyProgress { Phase = VerifyPhase.Done, Message = "Preflight complete" });
 
@@ -63,6 +76,7 @@ public sealed class PreflightEngine
             SourceTotalBytes = sourceBytes,
             DestTotalBytes = destBytes,
             Issues = issues,
+            Migration = migrationReport,
         };
     }
 
@@ -87,7 +101,9 @@ public sealed class PreflightEngine
         string label,
         List<string> issues,
         IProgress<VerifyProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        CloudMigrationPolicy? migration = null,
+        CloudMigrationReport? migrationReport = null)
     {
         // Directory.Exists is meaningless for a cloud target -- a SharePoint URL is not a filesystem
         // path -- and would report a false "not found". For those, reachability is established by the
@@ -115,6 +131,11 @@ public sealed class PreflightEngine
             await foreach (var record in _enumerator.EnumerateAsync(path, options, enumProgress, ct))
             {
                 if (excludes.IsExcluded(record.RelativePath)) continue;
+
+                // Assessed after exclusion: a file the run will never copy should not be reported
+                // as a migration problem.
+                if (migration is not null && migrationReport is not null && !record.IsDirectory)
+                    migrationReport.Add(migration.Assess(record.RelativePath, record.SizeBytes), record.SizeBytes);
                 count++;
                 bytes += record.SizeBytes;
             }
@@ -139,6 +160,44 @@ public sealed class PreflightEngine
             // the whole check, since the point of preflight is to list what is wrong.
             issues.Add($"[ERROR] {label} not reachable: {ex.Message}");
             return (false, null, null);
+        }
+    }
+
+    /// <summary>Destination limits used when assessing a cloud migration. Settable so a tenant with
+    /// its own blocked-extension list or a tighter path budget can be modelled.</summary>
+    public CloudLimits CloudLimits { get; set; } = new();
+
+    /// <summary>Summarises migration findings as preflight issues.
+    /// <para>Renames are a WARNING: they are expected, handled, and disclosed on the certificate.
+    /// Blocked files and name collisions are ERRORS, because each means the destination would not
+    /// receive a faithful copy of the source -- the thing the attestation is meant to establish.</para></summary>
+    private static void AddMigrationIssues(List<string> issues, CloudMigrationReport report)
+    {
+        if (report.RenameCount > 0)
+        {
+            var sample = string.Join("; ", report.RenameSamples
+                .Take(3).Select(r => $"\"{r.RelativePath}\" -> \"{r.SanitizedPath}\""));
+            issues.Add(
+                $"[WARN] {report.RenameCount:N0} file(s) will be renamed to satisfy destination naming " +
+                $"rules (e.g. {sample}). The certificate records that these names were transformed.");
+        }
+
+        if (report.BlockedCount > 0)
+        {
+            var sample = string.Join("; ", report.BlockedSamples
+                .Take(3).Select(b => $"\"{b.RelativePath}\" ({b.Blockers[0]})"));
+            issues.Add(
+                $"[ERROR] {report.BlockedCount:N0} file(s) cannot be migrated, totalling " +
+                $"{report.BlockedBytes:N0} bytes (e.g. {sample}). These cannot be fixed by renaming.");
+        }
+
+        if (report.Collisions.Count > 0)
+        {
+            var sample = string.Join("; ", report.Collisions
+                .Take(3).Select(c => $"\"{c.First}\" and \"{c.Second}\" both become \"{c.Sanitized}\""));
+            issues.Add(
+                $"[ERROR] {report.Collisions.Count:N0} name collision(s) after sanitizing: {sample}. " +
+                "One file would overwrite the other; rename one at the source first.");
         }
     }
 

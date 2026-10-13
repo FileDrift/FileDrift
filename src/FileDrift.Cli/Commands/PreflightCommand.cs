@@ -46,6 +46,21 @@ internal static class PreflightCommand
                     sourceBytes = result.SourceTotalBytes,
                     destBytes = result.DestTotalBytes,
                     issues = result.Issues,
+                    // Null-omitted for a local destination, so a normal preflight is unchanged.
+                    migration = result.Migration is not { } m ? null : new
+                    {
+                        filesAssessed = m.FilesAssessed,
+                        willBeRenamed = m.RenameCount,
+                        cannotMigrate = m.BlockedCount,
+                        cannotMigrateBytes = m.BlockedBytes,
+                        nameCollisions = m.Collisions.Count,
+                        renameSamples = m.RenameSamples
+                            .Select(r => new { from = r.RelativePath, to = r.SanitizedPath }).ToList(),
+                        blockedSamples = m.BlockedSamples
+                            .Select(b => new { path = b.RelativePath, reasons = b.Blockers }).ToList(),
+                        collisionSamples = m.Collisions
+                            .Select(c => new { first = c.First, second = c.Second, becomes = c.Sanitized }).ToList(),
+                    },
                 });
                 return result.IsReady ? 0 : 1;
             }

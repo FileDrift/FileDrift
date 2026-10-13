@@ -19,6 +19,10 @@ public sealed class PreFlightResult
     /// <summary>Human-readable issues that block or warn about the run.</summary>
     public IReadOnlyList<string> Issues { get; init; } = [];
 
+    /// <summary>Migration findings when the destination is a cloud target: which names must
+    /// change, which files cannot go at all. Null for a local destination.</summary>
+    public Cloud.CloudMigrationReport? Migration { get; init; }
+
     /// <summary>True when both paths are accessible and no blocking issues exist.</summary>
     public bool IsReady => SourceAccessible && DestAccessible && !Issues.Any(i => i.StartsWith("[ERROR]"));
 }
