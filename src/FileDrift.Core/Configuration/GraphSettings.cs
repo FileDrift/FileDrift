@@ -40,6 +40,11 @@ public sealed class GraphSettings
     /// <summary>Overrides the Graph base URL derived from <see cref="Cloud"/>. Normally null.</summary>
     public string? GraphBaseUrlOverride { get; set; }
 
+    /// <summary>How to sign in: <c>Interactive</c> (default — opens the system browser and returns to a
+    /// loopback redirect) or <c>DeviceCode</c> (prints a code to enter on another device; use this on a
+    /// server with no browser, or over a remote session where the loopback redirect won't work).</summary>
+    public string AuthMode { get; set; } = GraphAuthModes.Interactive;
+
     /// <summary>Redirect URI for the interactive sign-in. <c>http://localhost</c> matches the
     /// "Public client/native" platform an app registration uses for a desktop app.</summary>
     public string RedirectUri { get; set; } = "http://localhost";
@@ -69,6 +74,37 @@ public sealed class GraphSettings
         !string.IsNullOrWhiteSpace(GraphBaseUrlOverride)
             ? GraphBaseUrlOverride!.Trim().TrimEnd('/')
             : GraphCloud.GraphBaseUrl(Cloud);
+
+    /// <summary>The Graph resource root WITHOUT the API version segment, e.g.
+    /// <c>https://graph.microsoft.com</c>. Delegated scopes must be fully qualified against this —
+    /// short names like <c>Files.Read.All</c> are ambiguous across national clouds, where the resource
+    /// is graph.microsoft.us or microsoftgraph.chinacloudapi.cn instead.</summary>
+    [JsonIgnore]
+    public string GraphResource
+    {
+        get
+        {
+            var url = EffectiveGraphBaseUrl;
+            // Strip a trailing version segment ("/v1.0", "/beta") if present.
+            var lastSlash = url.LastIndexOf('/');
+            if (lastSlash > "https://".Length)
+            {
+                var tail = url[(lastSlash + 1)..];
+                if (tail.Length > 0 && (tail[0] == 'v' || tail.Equals("beta", StringComparison.OrdinalIgnoreCase)))
+                    return url[..lastSlash];
+            }
+            return url;
+        }
+    }
+
+    /// <summary>Scopes fully qualified against <see cref="GraphResource"/>, as MSAL needs them. A scope
+    /// already absolute (contains "://") is passed through unchanged.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> QualifiedScopes =>
+        (Scopes ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Contains("://", StringComparison.Ordinal) ? s.Trim() : $"{GraphResource}/{s.Trim()}")
+            .ToList();
 
     /// <summary>Full MSAL authority (authority host + tenant), or null if the tenant isn't set.</summary>
     [JsonIgnore]
@@ -106,6 +142,9 @@ public sealed class GraphSettings
             issues.Add($"Cloud '{restriction.Name}' is restricted by default: {restriction.Reason} " +
                        $"If this deployment genuinely operates there, add \"{restriction.Name}\" to " +
                        "AllowedRestrictedClouds in graph.json.");
+
+        if (!GraphAuthModes.IsKnown(AuthMode))
+            issues.Add($"AuthMode '{AuthMode}' is not recognized. Use {GraphAuthModes.KnownList}.");
 
         if (PageSize is < 1 or > 999)
             issues.Add($"PageSize {PageSize} is out of range (1–999).");
@@ -175,4 +214,24 @@ public static class GraphCloud
                 return name;
         return Global;
     }
+}
+
+/// <summary>How FileDrift signs in to Microsoft Graph.</summary>
+public static class GraphAuthModes
+{
+    /// <summary>System browser + loopback redirect. Default; best on a desktop.</summary>
+    public const string Interactive = "Interactive";
+
+    /// <summary>Print a code to enter at microsoft.com/devicelogin on another device. For a server
+    /// with no browser, or a remote session where the loopback redirect cannot be reached.</summary>
+    public const string DeviceCode = "DeviceCode";
+
+    public static string KnownList => $"{Interactive} or {DeviceCode}";
+
+    public static bool IsKnown(string? mode) =>
+        string.Equals(mode?.Trim(), Interactive, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(mode?.Trim(), DeviceCode, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsDeviceCode(string? mode) =>
+        string.Equals(mode?.Trim(), DeviceCode, StringComparison.OrdinalIgnoreCase);
 }

@@ -8,8 +8,8 @@ public class GraphSettingsTests
 {
     private static GraphSettings Valid() => new()
     {
-        ClientId = "6f947ff0-0000-4501-80a5-000000000000",
-        TenantId = "35963b39-0000-45d2-b0ca-000000000000",
+        ClientId = "11111111-2222-3333-4444-555555555555",
+        TenantId = "66666666-7777-8888-9999-aaaaaaaaaaaa",
     };
 
     [Fact]
