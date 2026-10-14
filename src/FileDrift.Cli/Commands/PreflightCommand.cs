@@ -11,6 +11,12 @@ internal static class PreflightCommand
         var src = new Option<string>("--src") { Description = "Source path (local or UNC)", Required = true };
         var dst = new Option<string>("--dst") { Description = "Destination path (local or UNC)", Required = true };
         var credSrc = new Option<string>("--cred-source") { Description = "Saved credential target name for the source share" };
+        var checkWrite = new Option<bool>("--check-write")
+        {
+            Description = "Test that the running account can actually WRITE to the destination, by " +
+                          "creating a tiny temporary file and deleting it. Off by default because it " +
+                          "writes; without it, write access is reported as untested rather than fine.",
+        };
         var credDst = new Option<string>("--cred-dest") { Description = "Saved credential target name for the destination share" };
 
         var cmd = new Command("preflight", "Check that source and destination are accessible and report file/byte counts");
@@ -18,6 +24,7 @@ internal static class PreflightCommand
         cmd.Add(dst);
         cmd.Add(credSrc);
         cmd.Add(credDst);
+        cmd.Add(checkWrite);
 
         cmd.SetAction(async (parseResult, ct) =>
         {
@@ -29,8 +36,14 @@ internal static class PreflightCommand
                 var sourceCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credSrc), srcVal);
                 var destCred = CliServices.ResolveCredentialForPath(parseResult.GetValue(credDst), dstVal);
 
+                var wantWrite = parseResult.GetValue(checkWrite);
+                // Only built when the probe is actually wanted: constructing a cloud target signs in
+                // and resolves the library, which a read-only preflight has no reason to do.
+                var destTarget = wantWrite ? await CliServices.CloudTargetAsync(dstVal, ct) : null;
+
                 var result = await CliServices.Preflight().RunAsync(
-                    srcVal, dstVal, new VerifyOptions(), sourceCred, destCred, progress: null, ct);
+                    srcVal, dstVal, new VerifyOptions(), sourceCred, destCred, progress: null, ct,
+                    destinationTarget: destTarget, checkWrite: wantWrite);
 
                 CliOutput.Write(new
                 {
@@ -45,6 +58,14 @@ internal static class PreflightCommand
                     destFiles = result.DestFileCount,
                     sourceBytes = result.SourceTotalBytes,
                     destBytes = result.DestTotalBytes,
+                    writeAccess = new
+                    {
+                        tested = result.WriteProbe.Attempted,
+                        canWrite = result.WriteProbe.Succeeded,
+                        probeRemoved = result.WriteProbe.CleanedUp,
+                        probePath = result.WriteProbe.ProbePath,
+                        error = result.WriteProbe.Error,
+                    },
                     issues = result.Issues,
                     // Null-omitted for a local destination, so a normal preflight is unchanged.
                     migration = result.Migration is not { } m ? null : new

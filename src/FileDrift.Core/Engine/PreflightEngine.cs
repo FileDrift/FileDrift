@@ -21,7 +21,9 @@ public sealed class PreflightEngine
         NetworkCredential? sourceCredential = null,
         NetworkCredential? destCredential = null,
         IProgress<VerifyProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IFileTarget? destinationTarget = null,
+        bool checkWrite = false)
     {
         // Same fail-fast as VerifyEngine: a cloud path here would otherwise reach Directory.Exists
         // and report a misleading "path not found".
@@ -58,6 +60,17 @@ public sealed class PreflightEngine
                 connection.Dispose();
         }
 
+        // Deliberately after the read checks: there is no point writing to a destination that could
+        // not be enumerated, and a failure there is the more useful thing to report first.
+        var writeProbe = checkWrite && destOk
+            ? await ProbeWriteAsync(destinationTarget ?? new LocalFileTarget(destPath), issues, cancellationToken)
+            : WriteProbeResult.NotAttempted();
+
+        // Silence here would read as "write access is fine". Say plainly that it was not tested.
+        if (!checkWrite && destOk)
+            issues.Add(
+                "[WARN] Write access to the destination was NOT tested. Reported permissions can differ from what a write actually does (an inherited deny, a retention or hold policy, a library requiring check-out, a quota at its limit). Pass --check-write to test it with a tiny temporary file before relying on this.");
+
         if (migrationReport is { HasFindings: true })
             AddMigrationIssues(issues, migrationReport);
 
@@ -77,6 +90,7 @@ public sealed class PreflightEngine
             DestTotalBytes = destBytes,
             Issues = issues,
             Migration = migrationReport,
+            WriteProbe = writeProbe,
         };
     }
 
@@ -198,6 +212,64 @@ public sealed class PreflightEngine
             issues.Add(
                 $"[ERROR] {report.Collisions.Count:N0} name collision(s) after sanitizing: {sample}. " +
                 "One file would overwrite the other; rename one at the source first.");
+        }
+    }
+
+    /// <summary>Attempts a real write to the destination and removes it again.
+    /// <para>A tiny uniquely-named file, so a concurrent run cannot collide and a failed cleanup is
+    /// identifiable by name. Target-agnostic: this answers "can this account write here" for an SMB
+    /// share just as usefully as for a SharePoint library.</para></summary>
+    private static async Task<WriteProbeResult> ProbeWriteAsync(
+        IFileTarget target, List<string> issues, CancellationToken cancellationToken)
+    {
+        // Named so that if cleanup fails, whoever finds it knows what it is and that it is disposable.
+        var probePath = $"filedrift-write-probe-{Guid.NewGuid():N}.tmp";
+        var payload = System.Text.Encoding.UTF8.GetBytes(
+            "FileDrift write-access probe. Safe to delete.");
+        var now = DateTime.UtcNow;
+
+        try
+        {
+            var written = await target.WriteFileAsync(new FileWriteRequest(
+                probePath,
+                _ => Task.FromResult<Stream>(new MemoryStream(payload)),
+                payload.Length,
+                now,
+                now), cancellationToken).ConfigureAwait(false);
+
+            // Clean up even if the byte count looks wrong -- something was created either way.
+            var cleaned = await target.TryDeletePartialAsync(
+                written.FinalRelativePath, CancellationToken.None).ConfigureAwait(false);
+
+            if (!cleaned)
+                issues.Add(
+                    $"[WARN] The write probe succeeded but its temporary file could not be removed. " +
+                    $"Delete \"{written.FinalRelativePath}\" from the destination by hand.");
+
+            return new WriteProbeResult
+            {
+                Attempted = true,
+                Succeeded = true,
+                CleanedUp = cleaned,
+                ProbePath = written.FinalRelativePath,
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // An ERROR, not a warning: a destination that cannot be written to will fail a reconcile,
+            // and finding that out now is the entire purpose of a preflight.
+            issues.Add($"[ERROR] Cannot write to the destination: {ex.Message}");
+            return new WriteProbeResult
+            {
+                Attempted = true,
+                Succeeded = false,
+                ProbePath = probePath,
+                Error = ex.Message,
+            };
         }
     }
 

@@ -23,6 +23,12 @@ public sealed class PreFlightResult
     /// change, which files cannot go at all. Null for a local destination.</summary>
     public Cloud.CloudMigrationReport? Migration { get; init; }
 
+    /// <summary>Whether the running account can actually write to the destination. Skipped unless
+    /// asked for, because the test involves a real write.
+    /// <para>Not attempted is NOT the same as fine: check <see cref="WriteProbeResult.Attempted"/>
+    /// before reading anything into it.</para></summary>
+    public WriteProbeResult WriteProbe { get; init; } = WriteProbeResult.NotAttempted();
+
     /// <summary>True when both paths are accessible and no blocking issues exist.</summary>
     public bool IsReady => SourceAccessible && DestAccessible && !Issues.Any(i => i.StartsWith("[ERROR]"));
 }
