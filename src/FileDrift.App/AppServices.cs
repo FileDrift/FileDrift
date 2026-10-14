@@ -48,6 +48,21 @@ internal static class AppServices
         return new GraphFileTarget(client, target, settings);
     }
 
+    /// <summary>Signs in to Microsoft Graph interactively. The ONLY path that prompts — a verify or
+    /// reconcile never does, so an unattended run fails with a clear message instead of waiting on a
+    /// browser nobody is watching.</summary>
+    /// <param name="deviceCodePrompt">Shows the device-code instructions, when that mode is configured.</param>
+    public static Task<GraphAccount> CloudSignInAsync(
+        Action<string>? deviceCodePrompt = null, CancellationToken ct = default) =>
+        new GraphAuthenticator(GraphSettingsStore.Load()).SignInAsync(deviceCodePrompt, ct);
+
+    /// <summary>Removes the cached sign-in from this machine. Returns how many accounts were removed.</summary>
+    public static Task<int> CloudSignOutAsync(CancellationToken ct = default) =>
+        new GraphAuthenticator(GraphSettingsStore.Load()).SignOutAsync(ct);
+
+    /// <summary>Where the Graph configuration file lives, for pointing the operator at it.</summary>
+    public static string GraphConfigPath => GraphSettingsStore.DefaultPath;
+
     /// <summary>Whether Graph is configured and signed in, for surfacing cloud readiness in the UI.
     /// Never throws: this is asked in order to DISPLAY state, including the broken state.</summary>
     public static async Task<(bool Configured, string? SignedInAs, string? Problem)> CloudStatusAsync(

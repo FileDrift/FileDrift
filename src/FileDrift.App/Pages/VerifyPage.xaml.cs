@@ -383,6 +383,73 @@ public partial class VerifyPage : Page
     /// dialog after the operator has already committed. Disabling the control and saying why is
     /// strictly better, and it is the difference between a tool that explains itself and one that
     /// just says no.</para></summary>
+    /// <summary>Shows a cloud sign-in prompt where it is actually needed, rather than making the
+    /// operator discover Settings after a run fails.
+    /// <para>Deliberately fire-and-forget and never throwing: this only reports readiness, and a
+    /// problem reaching the token cache must not interfere with typing a path.</para></summary>
+    private async Task RefreshCloudBarAsync()
+    {
+        if (CloudBar is null) return;
+
+        if (!CloudPath.InvolvesCloud(SourceBox?.Text, DestBox?.Text))
+        {
+            CloudBar.IsOpen = false;
+            return;
+        }
+
+        var (configured, signedInAs, problem) = await AppServices.CloudStatusAsync();
+
+        if (!configured)
+        {
+            CloudBar.Severity = Wpf.Ui.Controls.InfoBarSeverity.Error;
+            CloudBar.Title = "SharePoint not configured";
+            CloudBar.Message = $"{problem} Set it up in Settings, or run \"FileDrift-CLI graph set\".";
+            CloudBarSignIn.Visibility = Visibility.Collapsed;
+            CloudBar.IsOpen = true;
+            return;
+        }
+
+        if (signedInAs is null)
+        {
+            CloudBar.Severity = Wpf.Ui.Controls.InfoBarSeverity.Warning;
+            CloudBar.Title = "Not signed in to SharePoint";
+            CloudBar.Message = "This run needs a Microsoft Graph sign-in. Signing in caches a token, " +
+                               "so later runs do not prompt.";
+            CloudBarSignIn.Visibility = Visibility.Visible;
+            CloudBar.IsOpen = true;
+            return;
+        }
+
+        // Informational, not a warning: say WHOSE view the comparison will reflect, since delegated
+        // access bounds what it can see and the certificate will record it.
+        CloudBar.Severity = Wpf.Ui.Controls.InfoBarSeverity.Informational;
+        CloudBar.Title = "SharePoint";
+        CloudBar.Message = $"Reading as {signedInAs}. The comparison covers what this account can see.";
+        CloudBarSignIn.Visibility = Visibility.Collapsed;
+        CloudBar.IsOpen = true;
+    }
+
+    private async void OnCloudBarSignIn(object sender, RoutedEventArgs e)
+    {
+        CloudBarSignIn.IsEnabled = false;
+        try
+        {
+            var account = await AppServices.CloudSignInAsync(
+                deviceCodePrompt: msg => Dispatcher.Invoke(() =>
+                    _ = Dialogs.InfoAsync("Sign in on another device", msg)));
+            AppendLog($"Signed in to Microsoft Graph as {account.Username}.");
+        }
+        catch (Exception ex)
+        {
+            await Dialogs.InfoAsync("Sign-in failed", ex.Message);
+        }
+        finally
+        {
+            CloudBarSignIn.IsEnabled = true;
+            await RefreshCloudBarAsync();
+        }
+    }
+
     private void ApplyCloudConstraints()
     {
         if (AclSwitch is null || StrictSwitch is null || HashBox is null) return;
@@ -413,6 +480,9 @@ public partial class VerifyPage : Page
             : null;
 
         UpdateAclScopeEnabled();
+
+        // Fire-and-forget: this consults the token cache, and typing a path must not wait on it.
+        _ = RefreshCloudBarAsync();
     }
 
     /// <summary>When Strict is on, force Full/SHA-256/ACL and disable those controls so the UI

@@ -102,6 +102,26 @@
             </StackPanel>
         </ui:CardControl>
 
+        <ui:CardControl Icon="{ui:SymbolIcon Cloud24}" Margin="0,0,0,10">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <ui:TextBlock Text="SharePoint / OneDrive" FontTypography="BodyStrong" />
+                    <ui:TextBlock x:Name="CloudStatusText" Text="Checking…" TextWrapping="Wrap"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                    <ui:TextBlock x:Name="CloudHintText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,3,0,0"
+                                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:Button x:Name="CloudSignInButton" Content="Sign in" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon PersonKey24}" Click="OnCloudSignIn"
+                           ToolTip="Sign in to Microsoft Graph. The token is cached, so verify and reconcile runs never prompt." />
+                <ui:Button x:Name="CloudSignOutButton" Content="Sign out"
+                           Icon="{ui:SymbolIcon SignOut24}" Click="OnCloudSignOut"
+                           ToolTip="Remove the cached sign-in from this machine." />
+            </StackPanel>
+        </ui:CardControl>
+
         <ui:CardControl Icon="{ui:SymbolIcon Info24}" Margin="0,0,0,10">
             <ui:CardControl.Header>
                 <StackPanel>

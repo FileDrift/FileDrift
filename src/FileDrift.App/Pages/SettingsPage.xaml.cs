@@ -52,6 +52,101 @@ public partial class SettingsPage : Page
         LogThrottleSlider.Value = RuntimeOptions.LogThrottle.TotalSeconds;
         LogThrottleValue.Text = $"{RuntimeOptions.LogThrottle.TotalSeconds:0.0} s";
         _suppress = false;
+
+        // Fire-and-forget: this reaches out to the token cache and must never delay showing the page.
+        _ = RefreshCloudStatusAsync();
+    }
+
+    /// <summary>Shows whether Graph is configured and signed in. Never throws: it is asked in order to
+    /// DISPLAY state, including the broken state, so a configuration problem must appear as text here
+    /// rather than as an exception.</summary>
+    private async Task RefreshCloudStatusAsync()
+    {
+        CloudSignInButton.IsEnabled = false;
+        CloudSignOutButton.IsEnabled = false;
+
+        var (configured, signedInAs, problem) = await AppServices.CloudStatusAsync();
+
+        if (!configured)
+        {
+            CloudStatusText.Text = "Not configured.";
+            // Point at the file rather than describing it: the operator has to edit it.
+            CloudHintText.Text = $"{problem} Set ClientId and TenantId in {AppServices.GraphConfigPath}, " +
+                                 "or run \"FileDrift-CLI graph set\".";
+            CloudHintText.Visibility = Visibility.Visible;
+            CloudSignInButton.IsEnabled = false;
+            CloudSignOutButton.IsEnabled = false;
+            return;
+        }
+
+        if (signedInAs is null)
+        {
+            CloudStatusText.Text = "Configured, not signed in.";
+            CloudHintText.Text = "Verify and reconcile against a SharePoint path will fail until you sign in. " +
+                                 "Signing in here caches a token so runs never prompt.";
+            CloudHintText.Visibility = Visibility.Visible;
+            CloudSignInButton.IsEnabled = true;
+            CloudSignOutButton.IsEnabled = false;
+            return;
+        }
+
+        CloudStatusText.Text = $"Signed in as {signedInAs}";
+        // State the consequence of delegated access plainly: it bounds what any cloud run can see.
+        CloudHintText.Text = "FileDrift acts as this account, so a comparison covers only what it can " +
+                             "see. Certificates record which account read the data.";
+        CloudHintText.Visibility = Visibility.Visible;
+        CloudSignInButton.IsEnabled = true;   // allows switching account
+        CloudSignOutButton.IsEnabled = true;
+    }
+
+    private async void OnCloudSignIn(object sender, RoutedEventArgs e)
+    {
+        CloudSignInButton.IsEnabled = false;
+        CloudStatusText.Text = "Signing in…";
+        try
+        {
+            // Device-code instructions have nowhere to go in a GUI but a dialog; without this the
+            // operator would be left staring at a window that appears to do nothing.
+            var account = await AppServices.CloudSignInAsync(
+                deviceCodePrompt: msg => Dispatcher.Invoke(() =>
+                    _ = Dialogs.InfoAsync("Sign in on another device", msg)));
+
+            await Dialogs.InfoAsync("Signed in", $"Signed in to Microsoft Graph as {account.Username}.");
+        }
+        catch (Exception ex)
+        {
+            // The authenticator already translates Entra failures into the actual fix, so show its
+            // message rather than wrapping it in something vaguer.
+            await Dialogs.InfoAsync("Sign-in failed", ex.Message);
+        }
+        finally
+        {
+            await RefreshCloudStatusAsync();
+        }
+    }
+
+    private async void OnCloudSignOut(object sender, RoutedEventArgs e)
+    {
+        if (!await Dialogs.ConfirmAsync("Sign out of Microsoft Graph",
+                "Remove the cached sign-in from this machine? Verify and reconcile against a " +
+                "SharePoint path will fail until you sign in again.",
+                confirmText: "Sign out"))
+            return;
+
+        try
+        {
+            var removed = await AppServices.CloudSignOutAsync();
+            await Dialogs.InfoAsync("Signed out",
+                removed == 0 ? "There was no cached sign-in to remove." : "Cached sign-in removed.");
+        }
+        catch (Exception ex)
+        {
+            await Dialogs.InfoAsync("Sign-out failed", ex.Message);
+        }
+        finally
+        {
+            await RefreshCloudStatusAsync();
+        }
     }
 
     private void PopulatePresetBox()
