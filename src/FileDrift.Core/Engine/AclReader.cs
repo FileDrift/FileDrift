@@ -5,8 +5,11 @@ using FileDrift.Core.Engine.Native;
 namespace FileDrift.Core.Engine;
 
 /// <summary>Reads a file's owner + DACL as an SDDL string for comparison.
-/// Windows-only (uses advapi32); returns null on any failure.</summary>
-public sealed class AclReader
+/// Windows-only (uses advapi32); returns null on any failure.
+/// <para>Not sealed, and <see cref="TryGetSddl"/> is virtual, purely so callers that merely consume
+/// descriptors can be tested against canned SDDL. The P/Invoke itself is only meaningful against a
+/// real filesystem.</para></summary>
+public class AclReader
 {
     private const uint OwnerGroupDacl =
         AclMethods.OwnerSecurityInformation |
@@ -14,7 +17,7 @@ public sealed class AclReader
         AclMethods.DaclSecurityInformation;
 
     /// <summary>Full SDDL (owner + group + DACL), or null if it cannot be read.</summary>
-    public string? TryGetSddl(string path)
+    public virtual string? TryGetSddl(string path)
     {
         int err = AclMethods.GetNamedSecurityInfoW(
             path, AclMethods.SeFileObject, OwnerGroupDacl,

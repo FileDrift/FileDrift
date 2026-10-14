@@ -44,6 +44,11 @@ internal static class CliServices
         return new GraphFileTarget(client, target, settings);
     }
 
+    /// <summary>Enumerator for the permissions inventory. No cloud factory is supplied: a cloud
+    /// path has no Windows ACLs and is refused by the command before it gets here, so wiring one
+    /// in would only create a path that cannot do anything useful.</summary>
+    public static IFileEnumerator EnumeratorForPermissions() => new SmartFileEnumerator();
+
     private static IFileEnumerator CreateCloudEnumerator()
     {
         var settings = GraphSettingsStore.Load();

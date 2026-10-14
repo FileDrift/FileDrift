@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev12**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev13**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -74,6 +74,7 @@ FileDrift-CLI graph show                                   # SharePoint/OneDrive
 FileDrift-CLI graph set --client-id <id> --tenant-id <id>
 FileDrift-CLI graph login | logout | whoami                 # Graph sign-in
 FileDrift-CLI graph sites | ls | check-hash                 # discover targets, validate hashing
+FileDrift-CLI permissions --src <path> [--include-files]    # source permission inventory (report only)
 ```
 
 `reconcile` runs a verify, then copies source→destination to fix what differs. It is **non-destructive** (never deletes destination-only files; permissions are only added) and **previews by default** — it writes nothing unless you pass `--yes`. This makes it safe to schedule: run without `--yes` to see the plan, add `--yes` to apply.
@@ -101,7 +102,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev12: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev13: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -219,7 +220,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev12 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev13 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -230,6 +231,8 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **Source permissions inventory (`FileDrift-CLI permissions --src <path>`).** Lists the explicit (non-inherited) permissions on a source tree so they can be recreated at a destination by hand, in readable form ("Allow Administrators: Full control") with the raw SDDL retained for exact reproduction. **Grouped by distinct permission set**, because a real tree has thousands of folders sharing a handful of sets and a per-folder dump buries that; each set reports how many entries carry it and a sample of where. Folders only by default (explicit permissions normally live there, and reading every file's descriptor is far slower); `--include-files` widens it. Entries whose descriptor cannot be read are listed rather than dropped, since silently omitting them would understate what has to be recreated.
+  - **It is a report, not an attestation, and says so in its own output.** It describes the source at a point in time and examines nothing at the destination. FileDrift does not assign permissions, and deliberately cannot compare them across a cloud boundary — SharePoint's model has no Windows ACL equivalent — so a cloud path is refused outright rather than returning an empty report that could read as "no permissions are set". Certificates remain the only attestation, and they cover content.
 - **Renamed files pair correctly on a re-verify, and the certificate discloses it.** A file the destination stored under a transformed name used to re-verify as *both* missing at the destination and extra there — drift that was not drift, in the document meant to prove a migration was clean. The comparison now pairs on the name the file actually has at the destination while reporting the source name the operator knows, and states the destination name explicitly where it differs.
   - The certificate counts the renames and says plainly that the match covers content and size, **not** that the names are identical. A clean match over a tree whose names had to change is a weaker equivalence than it looks, and overstating it is the failure mode this project exists to avoid. The count is inside the fingerprinted block, so the disclosure cannot be edited out without breaking integrity.
   - Sanitizing is applied only when the destination requires it — a local destination accepts every name a source can hold, and transforming there would invent differences. Schema v5→v6.

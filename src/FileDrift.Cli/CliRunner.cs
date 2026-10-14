@@ -26,6 +26,7 @@ internal static class CliRunner
         root.Add(HistoryCommand.Build());
         root.Add(CredentialCommand.Build());
         root.Add(GraphCommand.Build());
+        root.Add(PermissionsCommand.Build());
         return await root.Parse(args).InvokeAsync(configuration: null, cancellationToken);
     }
 }

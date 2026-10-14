@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.CommandLine;
+using System.Text.Json.Nodes;
 using FileDrift.Core.Cloud;
 using FileDrift.Core.Configuration;
 using FileDrift.Core.Persistence;
@@ -313,7 +314,9 @@ internal static class GraphCommand
                         verb = "graph.sites",
                         site = site.DisplayName,
                         webUrl = site.WebUrl,
-                        libraries = drives.Select(d => new { d.Name, d.DriveType, d.WebUrl }).ToList(),
+                        // Ids are included because any Graph diagnostic or support request needs
+                        // them, and they are not otherwise discoverable from the UI.
+                        libraries = drives.Select(d => new { d.Name, d.DriveType, d.Id, d.WebUrl }).ToList(),
                     });
                     return 0;
                 }
@@ -379,10 +382,12 @@ internal static class GraphCommand
                     site = site.DisplayName,
                     library = drive.Name,
                     path = parseResult.GetValue(path) ?? "/",
+                    driveId = drive.Id,
                     count = children.Count,
                     items = children.Select(i => new
                     {
                         Name = DriveItemJson.Name(i),
+                        Id = i?["id"]?.GetValue<string>(),
                         Kind = DriveItemJson.IsFolder(i) ? "folder" : "file",
                         SizeBytes = DriveItemJson.Size(i),
                         LastModifiedUtc = DriveItemJson.LastModifiedUtc(i),
