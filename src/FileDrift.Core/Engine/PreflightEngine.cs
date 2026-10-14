@@ -27,7 +27,7 @@ public sealed class PreflightEngine
     {
         // Same fail-fast as VerifyEngine: a cloud path here would otherwise reach Directory.Exists
         // and report a misleading "path not found".
-        CloudPath.GuardSupported(sourcePath, destPath, options.IncludeAcl, options.Strict);
+        CloudPath.GuardSupported(sourcePath, destPath, options);
 
         var issues = new List<string>();
         var connections = new List<IDisposable>();

@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev14**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev15**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -102,7 +102,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev14: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev15: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -220,7 +220,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev14 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev15 (SharePoint/OneDrive groundwork)
 
 Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
 
@@ -231,6 +231,9 @@ Foundations for the first cloud target. **No cloud verification yet** — this b
   - `AuthMode` in `graph.json` selects `Interactive` (system browser, default) or `DeviceCode` for a server or remote session where the loopback redirect cannot be reached.
   - Scopes are requested fully qualified against the configured cloud's Graph resource, so a government tenant asks for `https://graph.microsoft.us/...` rather than the commercial endpoint — a short scope name would be ambiguous across national clouds.
   - Common Entra misconfigurations are translated into the actual fix (public-client flows disabled, missing admin consent, client/tenant mismatch, wrong tenant account, redirect-URI mismatch) instead of surfacing a bare `AADSTS` code.
+- **An unprovable hash is no longer reported as a match (correctness fix).** If a content hash could not be computed, equality was never established — but `string.Equals(null, null)` is true, so two files whose hashes were both unavailable were reported as **Matched** at Full depth. A certificate could therefore assert a content match for a pair that was never compared. Reachable two ways: both files unreadable (a deny that still permits directory listing), and a Full-depth cloud verify using an algorithm the service does not report. Now an absent hash on either side is a difference, which is what the surrounding comment always claimed. This predates the cloud work and applies to local verifies too.
+  - Relatedly, a Full-depth cloud comparison using **MD5** is now refused up front: Graph never reports an MD5 hash, so it could only ever compare nothing. The message names `quickxor`, which is what it does report.
+- **The GUI can now reach SharePoint/OneDrive.** `AppServices` wires the cloud enumerator and write target the CLI already had, so verify and reconcile work against a cloud path from the app. Combinations that cannot work are **disabled with a stated reason rather than failing once the run starts**: ACL comparison and Strict grey out when either side is a cloud path (and uncheck themselves, so the control never misrepresents what will run), and a Full-depth cloud verify switches away from MD5 automatically.
 - **Write-access check in preflight (`--check-write`).** Tests whether the running account can actually write to the destination, by creating a tiny uniquely-named file and deleting it again. Reported permissions routinely differ from what a write does — an inherited deny, a retention or hold policy, a library requiring check-out, a quota at its limit — and none of those appear in a permissions query, so attempting a real write is the only answer worth having. A failure is an **error** that blocks the run, which is the entire point of finding out before a copy rather than partway through one.
   - **Off by default, because it writes.** A step called "preflight" that writes to a destination unasked would be a trap. When it is skipped the result says write access was *not tested* rather than leaving silence to read as approval.
   - If the probe file cannot be removed afterwards, that is reported with its path. A tool that litters quietly is worse than one that says where the litter is.

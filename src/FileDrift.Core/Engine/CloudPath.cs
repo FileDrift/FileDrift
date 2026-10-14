@@ -27,22 +27,35 @@ public static class CloudPath
     /// <summary>Rejects cloud paths a run cannot honestly handle, so they fail with a clear message
     /// instead of being mistaken for a UNC path and producing a confusing filesystem error.</summary>
     /// <exception cref="NotSupportedException">The run involves a cloud path that isn't supported.</exception>
-    public static void GuardSupported(string? sourcePath, string? destPath, bool includeAcl, bool strict)
+    public static void GuardSupported(string? sourcePath, string? destPath, Models.VerifyOptions options)
     {
         if (!InvolvesCloud(sourcePath, destPath)) return;
 
         // Permanent rule, not a temporary gap: SharePoint permissions (role assignments and sharing
         // links) are a different model from Windows DACLs/SDDL, so there is nothing meaningful to
         // compare against a local ACL. Reporting "no ACL differences" would be a false assurance.
-        if (includeAcl)
+        if (options.IncludeAcl)
         {
-            throw new NotSupportedException(strict
+            throw new NotSupportedException(options.Strict
                 ? "Strict mode cannot be used with SharePoint/OneDrive paths: it forces ACL comparison, " +
                   "and SharePoint permissions have no equivalent in Windows ACLs. Use Full depth without " +
                   "Strict to compare content."
                 : "ACL comparison is not supported for SharePoint/OneDrive paths — SharePoint permissions " +
                   "are a different model from Windows ACLs and cannot be meaningfully compared. Turn ACL " +
                   "comparison off for this run.");
+        }
+
+        // Microsoft Graph never reports an MD5 hash, so a Full-depth cloud verify asking for one can
+        // only produce null hashes -- which, correctly, now count as "equality not established" and
+        // would report EVERY file as different. Refusing up front beats letting a long run complete
+        // and hand back a result that looks like total drift.
+        if (options.Depth >= Models.VerifyDepth.Full &&
+            options.HashAlgorithm == Models.FileDriftHashAlgorithm.MD5)
+        {
+            throw new NotSupportedException(
+                "MD5 cannot be used for a Full-depth comparison against SharePoint/OneDrive: the " +
+                "service does not report an MD5 hash, so no content could be compared. Use quickxor, " +
+                "which is the hash it does report (verify yours with \"FileDrift-CLI graph check-hash\").");
         }
     }
 }

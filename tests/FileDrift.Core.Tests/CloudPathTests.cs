@@ -50,14 +50,15 @@ public class CloudPathTests
     public void Guard_allows_purely_local_runs()
     {
         // No cloud path involved: ACL comparison and Strict stay perfectly legal.
-        CloudPath.GuardSupported(@"\\server\share", @"C:\Dest", includeAcl: true, strict: true);
+        CloudPath.GuardSupported(@"\\server\share", @"C:\Dest",
+            new VerifyOptions { IncludeAcl = true, Strict = true });
     }
 
     [Fact]
     public void Guard_rejects_acl_comparison_against_cloud()
     {
         var ex = Assert.Throws<NotSupportedException>(() => CloudPath.GuardSupported(
-            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", includeAcl: true, strict: false));
+            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", new VerifyOptions { IncludeAcl = true }));
         Assert.Contains("ACL comparison is not supported", ex.Message);
     }
 
@@ -65,7 +66,7 @@ public class CloudPathTests
     public void Guard_calls_out_strict_specifically_since_strict_forces_acls()
     {
         var ex = Assert.Throws<NotSupportedException>(() => CloudPath.GuardSupported(
-            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", includeAcl: true, strict: true));
+            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", new VerifyOptions { IncludeAcl = true, Strict = true }));
         Assert.Contains("Strict mode", ex.Message);
     }
 
@@ -75,8 +76,36 @@ public class CloudPathTests
         // The enumerator now exists, so a cloud path is a legitimate target. Only the ACL rule
         // (permanent) and the hard destination limits still block anything.
         CloudPath.GuardSupported(
-            @"C:\Source", "https://contoso.sharepoint.com/sites/IT", includeAcl: false, strict: false);
+            @"C:\Source", "https://contoso.sharepoint.com/sites/IT", new VerifyOptions());
         CloudPath.GuardSupported(
-            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", includeAcl: false, strict: false);
+            "https://contoso.sharepoint.com/sites/IT", @"C:\Dest", new VerifyOptions());
+    }
+
+    [Fact]
+    public void Guard_refuses_full_depth_md5_against_cloud()
+    {
+        // Graph never reports an MD5 hash, so this could only ever produce null hashes -- which now
+        // count as "equality not established" and would report every file as different. Refusing up
+        // front beats a long run returning what looks like total drift.
+        var ex = Assert.Throws<NotSupportedException>(() => CloudPath.GuardSupported(
+            @"C:\Source", "https://contoso.sharepoint.com/sites/IT",
+            new VerifyOptions { Depth = VerifyDepth.Full, HashAlgorithm = FileDriftHashAlgorithm.MD5 }));
+        Assert.Contains("quickxor", ex.Message);
+    }
+
+    [Fact]
+    public void Guard_allows_full_depth_quickxor_against_cloud()
+    {
+        CloudPath.GuardSupported(
+            @"C:\Source", "https://contoso.sharepoint.com/sites/IT",
+            new VerifyOptions { Depth = VerifyDepth.Full, HashAlgorithm = FileDriftHashAlgorithm.QuickXor });
+    }
+
+    [Fact]
+    public void Guard_allows_md5_for_a_purely_local_full_verify()
+    {
+        // MD5 is the default and perfectly fine off-cloud; the rule must not leak.
+        CloudPath.GuardSupported(@"C:\Source", @"C:\Dest",
+            new VerifyOptions { Depth = VerifyDepth.Full, HashAlgorithm = FileDriftHashAlgorithm.MD5 });
     }
 }

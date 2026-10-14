@@ -19,7 +19,8 @@ public partial class VerifyPage : Page
     /// Reconcile still acts on ALL differences, and the full list is always written to the run log.</summary>
     private const int MaxGridRows = 50_000;
 
-    private readonly SmartFileEnumerator _enumerator = new();
+    // Built via AppServices so it can reach SharePoint/OneDrive as well as local and SMB paths.
+    private readonly SmartFileEnumerator _enumerator = AppServices.CreateEnumerator();
     private readonly VerifyEngine _engine;
     private readonly PreflightEngine _preflight;
     private readonly ReconcileEngine _reconcile = new();
@@ -63,6 +64,7 @@ public partial class VerifyPage : Page
             ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
             UpdateHashVisibility();
             UpdateAclScopeEnabled();
+            ApplyCloudConstraints();
         }
 
         // Pick up credentials added on the Credentials page since last visit (but not mid-run).
@@ -335,6 +337,7 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(SourceCredBox, SourceBox.Text);
             UpdateModeReadout();
+            ApplyCloudConstraints();
             InvalidateStaleRun();
         }
         catch { /* partial/malformed path mid-type — ignore until it parses */ }
@@ -346,6 +349,7 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(DestCredBox, DestBox.Text);
             UpdateModeReadout();
+            ApplyCloudConstraints();
             InvalidateStaleRun();
         }
         catch { /* partial/malformed path mid-type — ignore until it parses */ }
@@ -371,6 +375,44 @@ public partial class VerifyPage : Page
     {
         if (AclScopeBox is null || AclSwitch is null || StrictSwitch is null) return;
         AclScopeBox.IsEnabled = AclSwitch.IsChecked == true && StrictSwitch.IsChecked != true;
+    }
+
+    /// <summary>Applies the constraints a cloud path imposes, so an impossible combination cannot be
+    /// selected at all.
+    /// <para>The engine refuses these anyway, but only once the run starts — which means an error
+    /// dialog after the operator has already committed. Disabling the control and saying why is
+    /// strictly better, and it is the difference between a tool that explains itself and one that
+    /// just says no.</para></summary>
+    private void ApplyCloudConstraints()
+    {
+        if (AclSwitch is null || StrictSwitch is null || HashBox is null) return;
+
+        var cloud = CloudPath.InvolvesCloud(SourceBox?.Text, DestBox?.Text);
+        if (cloud)
+        {
+            // Unchecked as well as disabled: a checked-but-ignored box would misrepresent what runs.
+            // SharePoint permissions are a different model from Windows ACLs, so there is nothing to
+            // compare — this is a permanent rule, not a gap.
+            if (AclSwitch.IsChecked == true) AclSwitch.IsChecked = false;
+            if (StrictSwitch.IsChecked == true) StrictSwitch.IsChecked = false;
+
+            // Graph never reports an MD5 hash, so a Full-depth cloud verify asking for one would
+            // compare nothing and report every file as different. QuickXor is what it does report.
+            if (HashBox.SelectedIndex == (int)FileDriftHashAlgorithm.MD5)
+                HashBox.SelectedIndex = (int)FileDriftHashAlgorithm.QuickXor;
+        }
+
+        const string aclReason =
+            "Not available for SharePoint/OneDrive: its permission model has no Windows ACL " +
+            "equivalent, so there is nothing meaningful to compare.";
+        AclSwitch.IsEnabled = !cloud && StrictSwitch.IsChecked != true;
+        AclSwitch.ToolTip = cloud ? aclReason : null;
+        StrictSwitch.IsEnabled = !cloud;
+        StrictSwitch.ToolTip = cloud
+            ? "Not available for SharePoint/OneDrive: Strict forces ACL comparison. " + aclReason
+            : null;
+
+        UpdateAclScopeEnabled();
     }
 
     /// <summary>When Strict is on, force Full/SHA-256/ACL and disable those controls so the UI
@@ -927,8 +969,15 @@ public partial class VerifyPage : Page
         try
         {
             Action<long> onLive = b => Interlocked.Exchange(ref _liveBytes, b);
+
+            // Null for a local/SMB destination, in which case the engine uses its own local
+            // target. Resolved before the run so a sign-in or configuration problem surfaces as
+            // an error here rather than as a failure partway through a copy.
+            var cloudTarget = await AppServices.CloudTargetAsync(_lastDst, _cts.Token);
+
             var runTask = Task.Run(() => _reconcile.ExecuteAsync(
-                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token, _softStop.Token, onLive));
+                plan, _lastSrc, _lastDst, _lastSrcCred, _lastDstCred, progress, _cts.Token, _softStop.Token, onLive,
+                target: cloudTarget));
             _reconcileTask = runTask; // non-generic handle so app-close can await the stop
             var result = await runTask;
 

@@ -112,15 +112,20 @@ public sealed class ComparisonEngine
 
             if (options.Depth >= VerifyDepth.Full)
             {
-                // Null on either side means the hash could not be computed — treat as a difference
-                // (conservative: we could not prove equality).
+                // A null hash means it could not be computed, so equality was never established.
+                // This is checked EXPLICITLY because string.Equals(null, null) is true: two
+                // unhashable files would otherwise be reported as a content match, and a
+                // certificate would assert equality at Full depth for a pair that was never
+                // compared. Reachable two ways -- both files unreadable (a deny that still
+                // permits directory listing), and a Full-depth cloud verify using an algorithm
+                // the service does not report, where every hash comes back null.
                 // quickXorHash is base64, which is CASE-SENSITIVE — comparing it case-insensitively
                 // could call two genuinely different hashes equal. Hex stays case-insensitive so a
                 // hash from a source that emits lowercase still matches.
                 var comparison = options.HashAlgorithm == FileDriftHashAlgorithm.QuickXor
                     ? StringComparison.Ordinal
                     : StringComparison.OrdinalIgnoreCase;
-                if (!string.Equals(s.Hash, d.Hash, comparison))
+                if (s.Hash is null || d.Hash is null || !string.Equals(s.Hash, d.Hash, comparison))
                     diff |= FileDifference.Hash;
             }
         }
