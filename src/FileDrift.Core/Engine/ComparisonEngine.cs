@@ -40,14 +40,24 @@ public sealed class ComparisonEngine
     {
         var results = new List<ComparisonResult>(source.Count);
 
-        foreach (var s in source.Values)
+        // Paired on the dictionary KEY, not on the record's own RelativePath. They are the same
+        // thing for a like-for-like comparison, but they diverge when the destination could not
+        // accept a source name: the key is then the name the file actually has at the destination,
+        // while the record keeps the original for reporting. Keying off the record instead would
+        // make every renamed file look missing at the destination AND extra there.
+        foreach (var (key, s) in source)
         {
-            if (dest.TryGetValue(s.RelativePath, out var d))
+            if (dest.TryGetValue(key, out var d))
             {
                 var diff = ComputeDifferences(s, d, options, out var aclDetail);
                 results.Add(new ComparisonResult
                 {
                     RelativePath = s.RelativePath,
+                    // Only set when the destination name differs, so a rename is visible rather
+                    // than silently resembling a like-named pair.
+                    DestinationRelativePath =
+                        string.Equals(s.RelativePath, d.RelativePath, StringComparison.Ordinal)
+                            ? null : d.RelativePath,
                     Status = diff == FileDifference.None ? ComparisonStatus.Matched : ComparisonStatus.Different,
                     Differences = diff,
                     Source = s,
@@ -68,9 +78,9 @@ public sealed class ComparisonEngine
 
         // Extras: anything on dest with no source counterpart. The source map answers that directly,
         // so no matched-paths set needs to be built and carried through the first pass.
-        foreach (var d in dest.Values)
+        foreach (var (key, d) in dest)
         {
-            if (!source.ContainsKey(d.RelativePath))
+            if (!source.ContainsKey(key))
                 results.Add(new ComparisonResult
                 {
                     RelativePath = d.RelativePath,

@@ -47,6 +47,13 @@ public sealed class RunRecord
 
     public long TotalDifferences => DifferentCount + MissingAtDestCount + ExtraAtDestCount;
 
+    /// <summary>How many entries were paired under a different name at the destination, because it
+    /// could not accept the source name.
+    /// <para>Recorded for attestation: a certificate reporting a clean match over a tree where
+    /// names had to be transformed would be stating a stronger equivalence than actually holds.
+    /// The content is identical; the names are not.</para></summary>
+    public long RenamedCount { get; set; }
+
     /// <summary>The cloud identity a cloud side of this run was read as (e.g. a Graph UPN), or null if
     /// neither side was a cloud target.
     /// <para>Recorded for attestation, not diagnostics. Graph access is DELEGATED, so what the run

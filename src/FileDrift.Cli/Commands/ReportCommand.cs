@@ -36,6 +36,7 @@ internal static class ReportCommand
                     destination = run.DestPath,
                     // Null-omitted for a purely local run, matching the signOff/reconcile blocks.
                     cloudAccount = run.CloudAccount,
+                    renamedCount = run.RenamedCount,
                     options = new
                     {
                         depth = run.Options.Depth,

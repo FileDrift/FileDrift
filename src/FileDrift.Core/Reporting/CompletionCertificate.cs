@@ -116,6 +116,7 @@ public static class CompletionCertificate
         // too -- otherwise a cloud run's certificate could be made to look like a local one by
         // stripping the line.
         Line("cloudAccount", run.CloudAccount ?? "");
+        Line("renamedCount", run.RenamedCount.ToString(CultureInfo.InvariantCulture));
         Line("depth", run.Options.Depth.ToString());
         Line("hashAlgorithm", run.Options.HashAlgorithm.ToString());
         Line("includeAcl", run.Options.IncludeAcl ? "true" : "false");
@@ -236,12 +237,24 @@ public static class CompletionCertificate
         Row(sb, "Matched", r.MatchedCount.ToString("N0", CultureInfo.InvariantCulture));
         Row(sb, "Differences", r.TotalDifferences.ToString("N0", CultureInfo.InvariantCulture));
         Row(sb, "Inaccessible (skipped)", r.InaccessibleCount.ToString("N0", CultureInfo.InvariantCulture));
+        if (r.RenamedCount > 0)
+            Row(sb, "Renamed at destination", r.RenamedCount.ToString("N0", CultureInfo.InvariantCulture));
         sb.Append("</table>\n");
 
         // Say plainly what a delegated cloud read does and does not establish. A bare account row
         // would leave a reader to assume the scan saw the whole library, which delegated access
         // cannot guarantee -- and an unstated limit is the kind of false assurance this document
         // exists to avoid.
+        // A clean match over a tree whose names had to change is a weaker equivalence than it looks.
+        // Saying so is the difference between an accurate attestation and an overstated one.
+        if (r.RenamedCount > 0)
+            sb.Append("<p class=\"cloud-note\"><strong>")
+              .Append(r.RenamedCount.ToString("N0", CultureInfo.InvariantCulture))
+              .Append(" file(s) or folder(s) were stored under a different name</strong> because the ")
+              .Append("destination does not permit the source name. Content and size were compared ")
+              .Append("against the renamed item, so the match above covers the data; it does not ")
+              .Append("assert that the names are identical. See the run report for each mapping.</p>");
+
         if (!string.IsNullOrWhiteSpace(r.CloudAccount))
             sb.Append("<p class=\"cloud-note\">A cloud location in this comparison was read as <code>")
               .Append(E(r.CloudAccount!))

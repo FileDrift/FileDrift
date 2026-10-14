@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
+using FileDrift.Core.Cloud;
 using FileDrift.Core.Interfaces;
 using FileDrift.Core.Models;
 
@@ -68,7 +69,16 @@ public sealed class VerifyEngine
 
             // Phase 1 & 2 — enumerate both trees, capturing paths that couldn't be read on each side
             // (so a "zero drift" result can't quietly omit files that were never readable).
-            var source = await EnumerateAsync(sourcePath, options, VerifyPhase.EnumeratingSource, progress, cancellationToken);
+            // When the destination is a cloud target, pair the source under the name that target
+            // would give it. Without this, a file SharePoint renamed on upload re-verifies as both
+            // missing at the destination and extra there -- drift that is not drift. Applied only
+            // for a cloud DESTINATION: a local destination accepts every name a source can hold,
+            // and sanitizing there would invent differences.
+            var sourceKeyMap = CloudPath.IsSharePoint(destPath)
+                ? SharePointNaming.Sanitize
+                : (Func<string, string>?)null;
+
+            var source = await EnumerateAsync(sourcePath, options, VerifyPhase.EnumeratingSource, progress, cancellationToken, sourceKeyMap);
             var sourceInaccessible = _enumerator.InaccessiblePaths.ToArray();
             var dest   = await EnumerateAsync(destPath, options, VerifyPhase.EnumeratingDestination, progress, cancellationToken);
             var inaccessible = sourceInaccessible.Concat(_enumerator.InaccessiblePaths).ToList();
@@ -168,7 +178,8 @@ public sealed class VerifyEngine
         VerifyOptions options,
         VerifyPhase phase,
         IProgress<VerifyProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, string>? keyMap = null)
     {
         // Plain Dictionary: this loop is the only writer, and enrichment computes in parallel but
         // writes back single-threaded — a ConcurrentDictionary cost an extra node allocation per entry
@@ -192,7 +203,10 @@ public sealed class VerifyEngine
             if (excludes.IsExcluded(record.RelativePath)) continue;
             // Start (lower bound), SYMMETRIC: ignore files modified before Start on both sides.
             if (options.StartUtc is { } start && record.LastWriteTimeUtc < start) { skippedOld++; continue; }
-            map[record.RelativePath] = record;
+            // The KEY is what the comparison pairs on, and it is not always the record's own path:
+            // where the destination cannot accept a source name, the source is keyed under the name
+            // the file will actually have there. The record keeps its original path for reporting.
+            map[keyMap is null ? record.RelativePath : keyMap(record.RelativePath)] = record;
             count++;
         }
 
@@ -300,9 +314,11 @@ public sealed class VerifyEngine
 
     private static void Tally(RunRecord run, IReadOnlyList<ComparisonResult> comparisons)
     {
-        long matched = 0, different = 0, missing = 0, extra = 0;
+        long matched = 0, different = 0, missing = 0, extra = 0, renamed = 0;
         foreach (var c in comparisons)
         {
+            if (c.DestinationRelativePath is not null) renamed++;
+
             switch (c.Status)
             {
                 case ComparisonStatus.Matched:      matched++;   break;
@@ -315,6 +331,7 @@ public sealed class VerifyEngine
         run.DifferentCount = different;
         run.MissingAtDestCount = missing;
         run.ExtraAtDestCount = extra;
+        run.RenamedCount = renamed;
     }
 
     private async Task SaveQuietlyAsync(RunRecord run)

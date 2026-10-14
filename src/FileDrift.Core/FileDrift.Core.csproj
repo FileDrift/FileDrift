@@ -7,7 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>FileDrift.Core</AssemblyName>
     <RootNamespace>FileDrift.Core</RootNamespace>
-    <Version>1.1.0-dev11</Version>
+    <Version>1.1.0-dev12</Version>
   </PropertyGroup>
 
   <ItemGroup>
