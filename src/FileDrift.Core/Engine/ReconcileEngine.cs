@@ -155,6 +155,10 @@ public sealed class ReconcileEngine
                     break;
                 }
                 n++;
+
+                // Where this file actually landed, when the target had to change the name. Hoisted
+                // out of the copy branch so the completion report can disclose it.
+                string? finalPath = null;
                 try
                 {
                     if (a.CreateDirectory)
@@ -191,7 +195,10 @@ public sealed class ReconcileEngine
                         // destination rejects names Windows allows). Record it rather than assume.
                         if (target.MayTransformNames &&
                             !string.Equals(writeResult.FinalRelativePath, a.RelativePath, StringComparison.Ordinal))
+                        {
                             renamed[a.RelativePath] = writeResult.FinalRelativePath;
+                            finalPath = writeResult.FinalRelativePath;
+                        }
 
                         // Attributes are a local-filesystem concern, applied after the content and
                         // timestamps so a copied read-only flag cannot block those writes.
@@ -247,10 +254,16 @@ public sealed class ReconcileEngine
                     });
                 }
 
+                // A rename is reported as Important so per-file throttling cannot sample it away. The
+                // certificate counts renames, and a log showing only the source name would leave the
+                // operator unable to corroborate that count against what actually happened.
                 progress?.Report(new ReconcileProgress
                 {
                     Processed = n, Total = total, BytesCopied = bytes, TotalBytes = totalBytes,
-                    Message = $"{ActionVerb(a)} {a.RelativePath}",
+                    Message = finalPath is null
+                        ? $"{ActionVerb(a)} {a.RelativePath}"
+                        : $"{ActionVerb(a)} {a.RelativePath}  ->  renamed at destination: {finalPath}",
+                    Important = finalPath is not null,
                 });
             }
         }

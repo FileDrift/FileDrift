@@ -54,12 +54,17 @@
                               TextTrimming="CharacterEllipsis"
                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
 
+                <!-- Filters the loaded list locally rather than re-querying. The tenant's site
+                     search matches indexed terms, so a partial word like "Tool" can miss "IT
+                     Toolbox" that a substring match finds instantly. -->
                 <ui:TextBox x:Name="SearchBox" Grid.Column="2" Width="190" Margin="10,0,6,0"
-                            PlaceholderText="Filter sites by name"
-                            ToolTip="Searches the tenant's site index. Leave empty to list all sites this account can see."
-                            KeyDown="OnSearchKeyDown" />
-                <ui:Button x:Name="SearchButton" Grid.Column="3" Content="Search"
-                           Icon="{ui:SymbolIcon Search24}" Click="OnSearch" />
+                            PlaceholderText="Filter sites"
+                            ToolTip="Filters the sites already listed, by name or URL. Matches anywhere in the text."
+                            Icon="{ui:SymbolIcon Filter24}"
+                            TextChanged="OnFilterChanged" />
+                <ui:Button x:Name="RefreshButton" Grid.Column="3"
+                           Icon="{ui:SymbolIcon ArrowClockwise24}" Click="OnRefresh"
+                           ToolTip="Ask the tenant for the site list again. Worth doing if a site was created recently — a new site can take a while to appear in the search index." />
             </Grid>
 
             <!-- Listing -->

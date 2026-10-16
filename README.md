@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev17**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev18**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -102,7 +102,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification and migration both work** as of 1.1.0-dev17: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`, and `reconcile` can copy *to* one. In the GUI, pick **SharePoint / OneDrive** as the location type and use **Browse** to pick the site, library and folder from the tenant — a SharePoint URL is not reliably composable by hand. ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification and migration both work** as of 1.1.0-dev18: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`, and `reconcile` can copy *to* one. In the GUI, pick **SharePoint / OneDrive** as the location type and use **Browse** to pick the site, library and folder from the tenant — a SharePoint URL is not reliably composable by hand. ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -220,7 +220,7 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev17 (SharePoint/OneDrive)
+### Unreleased — 1.1.0-dev18 (SharePoint/OneDrive)
 
 The first cloud target: SharePoint Online and OneDrive for Business can be verified against and migrated to, from both the CLI and the GUI.
 
@@ -231,6 +231,8 @@ The first cloud target: SharePoint Online and OneDrive for Business can be verif
   - The credential picker **greys out for a cloud path**, because SharePoint and OneDrive authenticate as the account signed in under Settings and a saved share credential cannot be used. Offering a choice with no effect on the run is its own kind of misreport.
 - **Options that cannot apply to a cloud path are now all disabled, from one place.** Compare ACLs, Enforce ownership and Strict mode grey out with a stated reason when either side is in the cloud, and the hash list offers only **quickXorHash** — the one content hash the service reports — with the others left visible but unselectable so the reason stays legible. A non-quickXor selection is also coerced, since a disabled item that is still *selected* would be exactly the misrepresentation the disabling exists to prevent.
   - These rules and Strict mode constrain the same controls, and previously each set its own enablement: unchecking Strict as a side effect of entering a cloud path raised its own event, whose handler re-enabled what the cloud rule had just disabled. Enablement is now derived in a single place from the current state, which removes the ordering dependency rather than sequencing around it.
+- **Renames are disclosed in the run log, not only counted in the certificate.** A file the destination had to store under a different name now shows both paths on its log line, and that line is marked important so per-file progress throttling cannot sample it away. A certificate stating how many files were renamed, alongside a log showing only source names, leaves the operator with a number they cannot corroborate — which is the weaker half of a disclosure. A verify also states the count in its summary, and the results grid gains a **Stored at dest as** column when any row has one. The column alone is not sufficient, because the grid holds only differences: a renamed file that otherwise matches never reaches it, which is exactly the clean-migration case.
+- **The site filter is live, and local.** Typing filters the sites already listed, matching anywhere in the name or the URL, with no request per keystroke. The tenant's own site search matches indexed terms, so a partial word like "Tool" can miss a site called "IT Toolbox" that a plain substring match finds instantly — re-querying per keystroke would have been both slower and worse at finding things. A **Refresh** action re-asks the tenant, which matters because a newly created site can be absent from the search index for a while; "not listed" never means "does not exist", and the path box stays editable for that case.
 - **Folder listings are paged to completion.** A document library with more children than one Graph page is ordinary, and a silently truncated listing in the browser would simply fail to show the folder you were looking for.
 
 - **quickXorHash support.** Microsoft Graph reports only `quickXorHash` for OneDrive/SharePoint content — not MD5 or SHA-256 — so content comparison against the cloud is impossible without it. FileDrift can now compute it locally (`--hash quickxor`, or QuickXor in the GUI's Hash list), which is what will make a Full-depth cloud verify meaningful rather than size-and-timestamp guesswork. It is a checksum, not a cryptographic hash: fine for drift detection, never a security primitive.

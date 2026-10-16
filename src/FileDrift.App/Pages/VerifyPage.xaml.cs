@@ -1331,6 +1331,13 @@ public partial class VerifyPage : Page
         // Differences only — matched files live in the count tile, never the grid.
         ResultsGrid.ItemsSource = rows;
 
+        // The grid holds only differences, so a renamed file that otherwise matches never reaches it.
+        // That makes the column necessary but not sufficient -- the summary below carries the count,
+        // which is the only disclosure a clean migration would ever show.
+        DestNameColumn.Visibility = rows.Any(r => r.DestinationPath.Length > 0)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
         var mode = _enumerator.Source switch
         {
             EnumerationSource.Mft => "MFT",
@@ -1342,6 +1349,9 @@ public partial class VerifyPage : Page
             $"across {run.TotalSourceFiles:N0} source / {run.TotalDestFiles:N0} dest entries.";
         if (result.ExcludedNewerCount > 0)
             summary += $"  ({result.ExcludedNewerCount:N0} newer dest files excluded by as-of filter.)";
+        if (run.RenamedCount > 0)
+            summary += $"  ({run.RenamedCount:N0} file(s) are stored under a different name at the " +
+                       "destination – the match is on content and size, not names.)";
         if (run.Options is { IncludeAcl: true, AclScope: AclScope.FoldersOnly })
             summary += "  (ACL scope: folders only – file permissions not checked.)";
         if (run.TotalDifferences > rows.Count)
@@ -1493,7 +1503,10 @@ public partial class VerifyPage : Page
         return unit == 0 ? $"{bytes} B" : $"{size:0.#} {units[unit]}";
     }
 
-    private sealed record ComparisonRow(string Path, string Status, string Differences, string Size)
+    /// <summary><paramref name="DestinationPath"/> is set only when the destination stored the file
+    /// under a different name, so a clean 1:1 copy shows nothing there.</summary>
+    private sealed record ComparisonRow(string Path, string Status, string Differences, string Size,
+                                        string DestinationPath)
     {
         public static ComparisonRow From(ComparisonResult c)
         {
@@ -1504,7 +1517,8 @@ public partial class VerifyPage : Page
                 c.RelativePath,
                 FormatStatus(c.Status),
                 diff,
-                record is { IsDirectory: false } ? FormatSize(record.SizeBytes) : "");
+                record is { IsDirectory: false } ? FormatSize(record.SizeBytes) : "",
+                c.DestinationRelativePath ?? "");
         }
 
         private static string FormatStatus(ComparisonStatus status) => status switch

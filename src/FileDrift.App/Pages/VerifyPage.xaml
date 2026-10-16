@@ -284,6 +284,11 @@
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
                 <DataGridTextColumn Header="Difference" Binding="{Binding Differences}" Width="140" />
                 <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="100" />
+                <!-- Shown only when something actually was renamed: a column that is empty on every
+                     row of every local run would cost density for nothing. -->
+                <DataGridTextColumn x:Name="DestNameColumn" Header="Stored at dest as"
+                                    Binding="{Binding DestinationPath}" Width="220"
+                                    Visibility="Collapsed" />
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

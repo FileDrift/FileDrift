@@ -36,7 +36,12 @@ public partial class CloudPickerWindow : FluentWindow
     /// <summary>The path from the sites root to where we are now. Empty means the sites level.</summary>
     private readonly List<CloudNode> _trail = [];
 
-    private string _search = "*";
+    /// <summary>Every site the account can see, fetched once. Filtering is then local, which is both
+    /// instant and a plain substring match -- the tenant's own site search matches indexed terms, so a
+    /// partial word ("Tool") can miss a site ("IT Toolbox") that a substring match finds immediately.
+    /// Re-querying per keystroke would be slower AND worse at finding things.</summary>
+    private List<CloudNode>? _allSites;
+
     private int _loadGeneration;
 
     /// <summary>The chosen location URL, set only when the operator pressed Select.</summary>
@@ -74,18 +79,24 @@ public partial class CloudPickerWindow : FluentWindow
         try
         {
             var current = Current;
-            IReadOnlyList<CloudNode> nodes = current switch
+            IReadOnlyList<CloudNode> nodes;
+            switch (current)
             {
-                null => await _browser.ListSitesAsync(_search),
-                { Kind: CloudNodeKind.Site } site => await _browser.ListLibrariesAsync(site.SiteId!),
-                var node => await _browser.ListFoldersAsync(node.SiteId!, node.DriveId!, node.FolderPath),
-            };
+                case null:
+                    _allSites ??= [.. await _browser.ListSitesAsync("*")];
+                    nodes = _allSites;
+                    break;
+                case { Kind: CloudNodeKind.Site } site:
+                    nodes = await _browser.ListLibrariesAsync(site.SiteId!);
+                    break;
+                default:
+                    nodes = await _browser.ListFoldersAsync(current.SiteId!, current.DriveId!, current.FolderPath);
+                    break;
+            }
 
             if (generation != _loadGeneration) return;
 
-            _rows.Clear();
-            foreach (var node in nodes) _rows.Add(new Row(node));
-            ShowEmptyNotice(nodes.Count == 0);
+            Show(nodes);
         }
         catch (Exception ex) when (generation == _loadGeneration)
         {
@@ -138,18 +149,45 @@ public partial class CloudPickerWindow : FluentWindow
         _ = LoadAsync();
     }
 
-    private void OnSearch(object sender, RoutedEventArgs e)
+    /// <summary>Fills the list, applying the sites filter when we are at that level.</summary>
+    private void Show(IReadOnlyList<CloudNode> nodes)
     {
-        // Searching is a sites-level operation, so it also returns there.
-        _trail.Clear();
-        var text = SearchBox.Text?.Trim();
-        _search = string.IsNullOrEmpty(text) ? "*" : text;
-        _ = LoadAsync();
+        var filtered = _trail.Count == 0 ? ApplyFilter(nodes) : nodes;
+
+        _rows.Clear();
+        foreach (var node in filtered) _rows.Add(new Row(node));
+        ShowEmptyNotice(filtered.Count == 0);
     }
 
-    private void OnSearchKeyDown(object sender, KeyEventArgs e)
+    private IReadOnlyList<CloudNode> ApplyFilter(IReadOnlyList<CloudNode> nodes)
     {
-        if (e.Key == Key.Enter) OnSearch(sender, e);
+        var text = SearchBox?.Text?.Trim();
+        if (string.IsNullOrEmpty(text)) return nodes;
+
+        // Matches the URL as well as the name, because the two differ in exactly the way that trips
+        // people up: a site shown as "Public Works" lives at /sites/PublicWorks.
+        return [.. nodes.Where(n =>
+            n.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
+            (n.WebUrl?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false))];
+    }
+
+    private void OnFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        // Purely local, so this can run on every keystroke with no request and no debounce.
+        if (_allSites is null || _trail.Count != 0) return;
+        Show(_allSites);
+        UpdateSelection();
+    }
+
+    /// <summary>Re-asks the tenant for the site list.</summary>
+    /// <remarks>Worth having as an explicit action: a newly created site can be missing from the
+    /// search index for a while, so "not listed" does not mean "does not exist". The path box stays
+    /// editable for exactly that case.</remarks>
+    private void OnRefresh(object sender, RoutedEventArgs e)
+    {
+        _allSites = null;
+        _trail.Clear();
+        _ = LoadAsync();
     }
 
     // -- selection --
@@ -192,7 +230,7 @@ public partial class CloudPickerWindow : FluentWindow
         Busy.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         ItemList.IsEnabled = !busy;
         UpButton.IsEnabled = !busy && _trail.Count > 0;
-        SearchButton.IsEnabled = !busy;
+        RefreshButton.IsEnabled = !busy;
     }
 
     private void ShowError(string message)
@@ -206,11 +244,14 @@ public partial class CloudPickerWindow : FluentWindow
         EmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         if (!empty) return;
 
+        var filter = SearchBox?.Text?.Trim();
         EmptyText.Text = Current switch
         {
-            null => _search == "*"
-                ? "No sites are visible to this account. " + CloudBrowser.ScopeCaveat
-                : $"No sites matched “{_search}” that this account can access.",
+            null when !string.IsNullOrEmpty(filter) =>
+                $"No listed site matches “{filter}”. " + CloudBrowser.ScopeCaveat +
+                " A site created recently may not be in the search index yet - try Refresh, or paste " +
+                "its URL into the path box instead.",
+            null => "No sites are visible to this account. " + CloudBrowser.ScopeCaveat,
             { Kind: CloudNodeKind.Site } => "This site has no document libraries this account can see.",
             _ => "No sub-folders here. Press Select to choose this folder.",
         };
@@ -220,10 +261,11 @@ public partial class CloudPickerWindow : FluentWindow
     {
         UpButton.IsEnabled = _trail.Count > 0;
 
-        // Search only applies to the site index, so it is offered only where it does something.
+        // Filtering and refreshing are sites-level actions, so they are offered only where they do
+        // something.
         var atSites = _trail.Count == 0;
         SearchBox.IsEnabled = atSites;
-        SearchButton.IsEnabled = atSites;
+        RefreshButton.IsEnabled = atSites;
 
         ScopeBar.Message = CloudBrowser.ScopeCaveat;
         ScopeBar.IsOpen = atSites;
