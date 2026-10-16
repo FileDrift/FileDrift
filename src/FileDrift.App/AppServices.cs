@@ -63,6 +63,16 @@ internal static class AppServices
     /// <summary>Where the Graph configuration file lives, for pointing the operator at it.</summary>
     public static string GraphConfigPath => GraphSettingsStore.DefaultPath;
 
+    /// <summary>A browser over the tenant's sites and libraries, for the location picker.</summary>
+    /// <remarks>Built per use rather than cached: it holds a client bound to the settings as they
+    /// were when loaded, and the operator can edit those settings or sign in as a different account
+    /// between one browse and the next.</remarks>
+    public static CloudBrowser CreateCloudBrowser()
+    {
+        var settings = GraphSettingsStore.Load();
+        return new CloudBrowser(new GraphClient(new GraphAuthenticator(settings), settings));
+    }
+
     /// <summary>Whether Graph is configured and signed in, for surfacing cloud readiness in the UI.
     /// Never throws: this is asked in order to DISPLAY state, including the broken state.</summary>
     public static async Task<(bool Configured, string? SignedInAs, string? Problem)> CloudStatusAsync(

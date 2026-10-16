@@ -20,7 +20,7 @@ It can also copy source→destination to reconcile differences it finds, which i
 
 ## Roadmap
 
-Current version: **1.0.0** — released. (`main` is at **1.1.0-dev16**, in-progress work toward SharePoint/OneDrive support.)
+Current version: **1.0.0** — released. (`main` is at **1.1.0-dev17**, in-progress work toward SharePoint/OneDrive support.)
 
 > **This release is unsigned.** Public-trust code signing (via SignPath Foundation) is still pending approval — see [Releases & signing](#releases--signing). If you're distributing internally, sign the binaries yourself with `sign.ps1` and an internal CA certificate before deploying.
 
@@ -102,7 +102,7 @@ CLI output is a **human-readable table** in an interactive console (handy for qu
 
 ### SharePoint Online / OneDrive (in progress)
 
-> **Verification against SharePoint/OneDrive works** as of 1.1.0-dev16: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`. Writing *to* SharePoint (reconcile/upload) is not implemented yet — see [Roadmap](#roadmap). ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
+> **Verification and migration both work** as of 1.1.0-dev17: a `https://…sharepoint.com/…` path can be either side of a `verify` or `preflight`, and `reconcile` can copy *to* one. In the GUI, pick **SharePoint / OneDrive** as the location type and use **Browse** to pick the site, library and folder from the tenant — a SharePoint URL is not reliably composable by hand. ACL comparison against a cloud path is permanently refused, because SharePoint permissions are a different model from Windows ACLs and reporting "no differences" would be a false assurance.
 
 SharePoint access uses **your own Azure AD app registration** — nothing is compiled into FileDrift, since a client and tenant ID identify one organization. Register a single-tenant app with the *Public client/native* platform and redirect URI `http://localhost`, grant the delegated Graph scopes `Files.Read.All` and `Sites.Read.All`, then:
 
@@ -220,9 +220,18 @@ Once SignPath Foundation approval is in place, public Windows release binaries o
 
 Versioning follows `major.minor.bugfix`. The `0.x` series was pre-release; `1.0.0` is the first released build. A `-devN` suffix marks in-progress work toward the next version that is not yet a release.
 
-### Unreleased — 1.1.0-dev16 (SharePoint/OneDrive groundwork)
+### Unreleased — 1.1.0-dev17 (SharePoint/OneDrive)
 
-Foundations for the first cloud target. **No cloud verification yet** — this build only recognizes SharePoint/OneDrive paths so they fail clearly instead of being mistaken for a network path.
+The first cloud target: SharePoint Online and OneDrive for Business can be verified against and migrated to, from both the CLI and the GUI.
+
+- **Pick the location type, then browse the tenant for it.** Each path now has a **type selector** in front of it — *Local or network folder* or *SharePoint / OneDrive* — and **Browse** opens the dialog that fits: a folder picker, or a browser over the tenant that walks sites, then document libraries, then folders. A SharePoint URL is not reliably composable by hand (a library's URL segment "Shared Documents" is "Documents" in Graph, and only the tenant knows where the site path ends and the library begins), so the tenant answers instead of the operator guessing.
+  - The type is a **gate, not a hint**: a path that contradicts its stated type is reported as that mismatch and refused, rather than becoming a filesystem error about a path that does not exist. The same check covers verify, preflight and reconcile, because all three pass through it.
+  - Switching the type **keeps what was typed for the other one**, so comparing the two options costs nothing.
+  - The site list is **bounded by the signed-in account, and says so on screen**. Delegated access means an administrator role does not grant content access on its own, so a site you manage may still need you added to it before it appears. Presenting the listing as the tenant's contents would be a false claim; a 403 while browsing says this explicitly, including that a grant you just made can take a few minutes to take effect.
+  - The credential picker **greys out for a cloud path**, because SharePoint and OneDrive authenticate as the account signed in under Settings and a saved share credential cannot be used. Offering a choice with no effect on the run is its own kind of misreport.
+- **Options that cannot apply to a cloud path are now all disabled, from one place.** Compare ACLs, Enforce ownership and Strict mode grey out with a stated reason when either side is in the cloud, and the hash list offers only **quickXorHash** — the one content hash the service reports — with the others left visible but unselectable so the reason stays legible. A non-quickXor selection is also coerced, since a disabled item that is still *selected* would be exactly the misrepresentation the disabling exists to prevent.
+  - These rules and Strict mode constrain the same controls, and previously each set its own enablement: unchecking Strict as a side effect of entering a cloud path raised its own event, whose handler re-enabled what the cloud rule had just disabled. Enablement is now derived in a single place from the current state, which removes the ordering dependency rather than sequencing around it.
+- **Folder listings are paged to completion.** A document library with more children than one Graph page is ordinary, and a silently truncated listing in the browser would simply fail to show the folder you were looking for.
 
 - **quickXorHash support.** Microsoft Graph reports only `quickXorHash` for OneDrive/SharePoint content — not MD5 or SHA-256 — so content comparison against the cloud is impossible without it. FileDrift can now compute it locally (`--hash quickxor`, or QuickXor in the GUI's Hash list), which is what will make a Full-depth cloud verify meaningful rather than size-and-timestamp guesswork. It is a checksum, not a cryptographic hash: fine for drift detection, never a security primitive.
 - **Cloud paths are recognized and refused with a clear reason.** A `https://…sharepoint.com/…` source or destination is now detected up front. ACL comparison against a cloud path is refused permanently — SharePoint permissions are a different model from Windows ACLs and reporting "no ACL differences" would be a false assurance — and Strict mode says so specifically, since Strict forces ACLs on. Everything else reports that cloud verification isn't implemented yet, instead of falling through to the SMB scanner and failing confusingly.

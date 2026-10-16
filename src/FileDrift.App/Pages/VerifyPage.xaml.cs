@@ -41,6 +41,17 @@ public partial class VerifyPage : Page
     private NetworkCredential? _lastSrcCred, _lastDstCred;
     private string? _lastSrcCredTarget, _lastDstCredTarget; // which combo entry was verified, for staleness checks
 
+    // Which kind of location each side is. The path text stays the single source of truth for
+    // routing (the enumerator still decides from the path), so these drive the UI only: which
+    // Browse dialog opens, which placeholder shows, and whether the path and the stated kind agree.
+    private LocationKind _sourceKind = LocationKind.FileSystem;
+    private LocationKind _destKind = LocationKind.FileSystem;
+    private bool _initializingKinds;
+
+    // What was last typed for each (side, kind) pair. Switching the type to look at the other option
+    // must not destroy a path the operator spent effort on -- switching back brings it straight back.
+    private readonly Dictionary<(bool IsSource, LocationKind Kind), string> _rememberedPaths = [];
+
     public VerifyPage()
     {
         InitializeComponent();
@@ -64,6 +75,7 @@ public partial class VerifyPage : Page
             ThreadsHint.Text = $"of {Environment.ProcessorCount} detected";
             UpdateHashVisibility();
             UpdateAclScopeEnabled();
+            InitKindSelectors();
             ApplyCloudConstraints();
         }
 
@@ -328,6 +340,13 @@ public partial class VerifyPage : Page
         return target is null ? null : _credentials.GetCredential(target);
     }
 
+    /// <summary>Resolves the credential for a side, or null when that side is a cloud path.</summary>
+    /// <remarks>SharePoint and OneDrive authenticate as the signed-in Graph account, so handing a
+    /// share credential down the call chain would be passing something that cannot be used -- and it
+    /// would be recorded against the run as though it had been.</remarks>
+    private NetworkCredential? ResolveCredential(ComboBox box, LocationKind kind) =>
+        kind == LocationKind.SharePoint ? null : ResolveCredential(box);
+
     // ── input events ──
 
     // These fire on every keystroke with arbitrary partial path text; never let one crash the app.
@@ -337,6 +356,7 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(SourceCredBox, SourceBox.Text);
             UpdateModeReadout();
+            UpdateKindMismatch();
             ApplyCloudConstraints();
             InvalidateStaleRun();
         }
@@ -349,10 +369,116 @@ public partial class VerifyPage : Page
         {
             AutoSelectCredential(DestCredBox, DestBox.Text);
             UpdateModeReadout();
+            UpdateKindMismatch();
             ApplyCloudConstraints();
             InvalidateStaleRun();
         }
         catch { /* partial/malformed path mid-type — ignore until it parses */ }
+    }
+
+    // -- location type --
+
+    /// <summary>Fills both type selectors from the model, so adding a location kind does not mean
+    /// editing XAML in two places.</summary>
+    private void InitKindSelectors()
+    {
+        _initializingKinds = true;
+        try
+        {
+            foreach (var box in new[] { SourceKindBox, DestKindBox })
+            {
+                box.Items.Clear();
+                foreach (var kind in LocationKinds.All)
+                    box.Items.Add(new ComboBoxItem { Content = LocationKinds.Label(kind), Tag = kind });
+            }
+
+            // A path may already be present (the boxes survive navigation), so start from what it
+            // looks like rather than forcing the first entry and contradicting the text.
+            _sourceKind = LocationKinds.Detect(SourceBox.Text);
+            _destKind = LocationKinds.Detect(DestBox.Text);
+            SourceKindBox.SelectedIndex = Array.IndexOf(LocationKinds.All, _sourceKind);
+            DestKindBox.SelectedIndex = Array.IndexOf(LocationKinds.All, _destKind);
+        }
+        finally { _initializingKinds = false; }
+
+        ApplyKindChrome();
+    }
+
+    private static LocationKind KindOf(ComboBox box) =>
+        box.SelectedItem is ComboBoxItem { Tag: LocationKind kind } ? kind : LocationKind.FileSystem;
+
+    private void OnSourceKindChanged(object sender, SelectionChangedEventArgs e) => OnKindChanged(isSource: true);
+
+    private void OnDestKindChanged(object sender, SelectionChangedEventArgs e) => OnKindChanged(isSource: false);
+
+    private void OnKindChanged(bool isSource)
+    {
+        // Fired while populating the items, before the controls it touches are meaningful.
+        if (_initializingKinds) return;
+
+        var box = isSource ? SourceBox : DestBox;
+        var previous = isSource ? _sourceKind : _destKind;
+        var next = KindOf(isSource ? SourceKindBox : DestKindBox);
+        if (previous == next) return;
+
+        _rememberedPaths[(isSource, previous)] = box.Text ?? "";
+        if (isSource) _sourceKind = next; else _destKind = next;
+
+        // Setting Text raises the path-changed handler, which refreshes the readout, the cloud
+        // constraints and run staleness -- so a type change invalidates a cached run exactly when it
+        // actually changes the path being compared, and not when it dials back to the verified one.
+        box.Text = _rememberedPaths.TryGetValue((isSource, next), out var restored) ? restored : "";
+
+        ApplyKindChrome();
+        UpdateModeReadout();
+        ApplyCloudConstraints();
+        InvalidateStaleRun();
+    }
+
+    /// <summary>Applies what the selected kind changes about the row: the placeholder, whether a saved
+    /// share credential means anything, and what Browse will do.</summary>
+    private void ApplyKindChrome()
+    {
+        if (SourceKindBox is null || DestKindBox is null) return;
+
+        Apply(_sourceKind, SourceBox, SourceCredBox, SourceBrowseButton);
+        Apply(_destKind, DestBox, DestCredBox, DestBrowseButton);
+        UpdateKindMismatch();
+
+        static void Apply(LocationKind kind, Wpf.Ui.Controls.TextBox path, ComboBox credential,
+                          Wpf.Ui.Controls.Button browse)
+        {
+            path.PlaceholderText = LocationKinds.Placeholder(kind);
+            var cloud = kind == LocationKind.SharePoint;
+
+            // A saved share credential cannot authenticate Graph: SharePoint and OneDrive are read and
+            // written as the account signed in under Settings. Leaving the picker live would imply a
+            // choice that has no effect on the run.
+            credential.IsEnabled = !cloud;
+            credential.ToolTip = cloud
+                ? "Not used for SharePoint/OneDrive. These run as the account signed in to Microsoft Graph, under Settings."
+                : "Credential to authenticate the share";
+
+            browse.ToolTip = cloud
+                ? "Browse the tenant for a site, document library and folder"
+                : "Browse for a local or network folder";
+        }
+    }
+
+    /// <summary>Reports a path that contradicts its selected type. Worth saying out loud: without it,
+    /// a mistyped SharePoint URL becomes a filesystem error about a path that does not exist, which
+    /// describes the symptom instead of the mistake.</summary>
+    private void UpdateKindMismatch()
+    {
+        if (KindMismatchBar is null) return;
+
+        var message =
+            LocationKinds.Mismatch(_sourceKind, SourceBox?.Text) is { } source ? "Source: " + source
+            : LocationKinds.Mismatch(_destKind, DestBox?.Text) is { } dest ? "Destination: " + dest
+            : null;
+
+        KindMismatchBar.Message = message ?? "";
+        KindMismatchBar.IsOpen = message is not null;
     }
 
     private void OnDepthChanged(object sender, SelectionChangedEventArgs e) => UpdateHashVisibility();
@@ -463,26 +589,74 @@ public partial class VerifyPage : Page
             if (AclSwitch.IsChecked == true) AclSwitch.IsChecked = false;
             if (StrictSwitch.IsChecked == true) StrictSwitch.IsChecked = false;
 
-            // Graph never reports an MD5 hash, so a Full-depth cloud verify asking for one would
-            // compare nothing and report every file as different. QuickXor is what it does report.
-            if (HashBox.SelectedIndex == (int)FileDriftHashAlgorithm.MD5)
+            // quickXorHash is the only content hash the service reports, so any other choice would
+            // compare nothing and report every file as different. Coerce the selection rather than
+            // only disabling the others: a disabled item that is still SELECTED would be the exact
+            // misrepresentation the disabling exists to prevent.
+            if (HashBox.SelectedIndex != (int)FileDriftHashAlgorithm.QuickXor)
                 HashBox.SelectedIndex = (int)FileDriftHashAlgorithm.QuickXor;
         }
+
+        ApplyOptionEnablement();
+
+        // Fire-and-forget: this consults the token cache, and typing a path must not wait on it.
+        _ = RefreshCloudBarAsync();
+    }
+
+    /// <summary>The single place that decides which comparison options are selectable, and why.</summary>
+    /// <remarks>
+    /// Single-sourced on purpose. Both the cloud rules and Strict mode constrain the same controls,
+    /// and when each set its own enablement the result depended on call order -- unchecking Strict
+    /// from the cloud path raises its own changed-event, whose handler re-enabled controls the cloud
+    /// rule had just disabled. Deriving every state here from the current facts removes the race
+    /// instead of ordering around it.
+    /// </remarks>
+    private void ApplyOptionEnablement()
+    {
+        if (AclSwitch is null || StrictSwitch is null || OwnerSwitch is null || HashBox is null) return;
+
+        var cloud = CloudPath.InvolvesCloud(SourceBox?.Text, DestBox?.Text);
+        var strict = StrictSwitch.IsChecked == true;
 
         const string aclReason =
             "Not available for SharePoint/OneDrive: its permission model has no Windows ACL " +
             "equivalent, so there is nothing meaningful to compare.";
-        AclSwitch.IsEnabled = !cloud && StrictSwitch.IsChecked != true;
+
+        AclSwitch.IsEnabled = !cloud && !strict;
         AclSwitch.ToolTip = cloud ? aclReason : null;
+
+        // Ownership is read from the Windows security descriptor, and is only consulted as part of an
+        // ACL comparison. Leaving it live against a cloud path would offer a check that cannot run.
+        OwnerSwitch.IsEnabled = !cloud && !strict;
+        OwnerSwitch.ToolTip = cloud
+            ? "Not available for SharePoint/OneDrive: ownership comes from the Windows security " +
+              "descriptor, which has no equivalent here."
+            : null;
+
         StrictSwitch.IsEnabled = !cloud;
         StrictSwitch.ToolTip = cloud
             ? "Not available for SharePoint/OneDrive: Strict forces ACL comparison. " + aclReason
             : null;
 
-        UpdateAclScopeEnabled();
+        DepthBox.IsEnabled = !strict;
 
-        // Fire-and-forget: this consults the token cache, and typing a path must not wait on it.
-        _ = RefreshCloudBarAsync();
+        // Only quickXorHash can be compared against SharePoint/OneDrive -- it is the one content hash
+        // the service reports. The others are left visible but unselectable so the reason is legible:
+        // hiding them would make the list look arbitrary, and leaving them selectable would let a run
+        // compare nothing and report every file as different.
+        for (var i = 0; i < HashBox.Items.Count; i++)
+        {
+            if (HashBox.Items[i] is not ComboBoxItem item) continue;
+            var quickXor = i == (int)FileDriftHashAlgorithm.QuickXor;
+            item.IsEnabled = !cloud || quickXor;
+            if (cloud && !quickXor)
+                item.ToolTip = "Not available for SharePoint/OneDrive: the service reports only " +
+                               "quickXorHash, so this algorithm could compare nothing.";
+            else if (!cloud)
+                item.ToolTip = null;
+        }
+
+        UpdateAclScopeEnabled();
     }
 
     /// <summary>When Strict is on, force Full/SHA-256/ACL and disable those controls so the UI
@@ -501,11 +675,8 @@ public partial class VerifyPage : Page
             AclScopeBox.SelectedIndex = 0;    // Strict is complete: files + folders
         }
 
-        DepthBox.IsEnabled = !strict;
-        AclSwitch.IsEnabled = !strict;
-        OwnerSwitch.IsEnabled = !strict;
         UpdateHashVisibility();
-        UpdateAclScopeEnabled();
+        ApplyOptionEnablement();
     }
 
     private void UpdateModeReadout()
@@ -522,14 +693,38 @@ public partial class VerifyPage : Page
         ModeText.Text = $"Source → {Mode(SourceBox.Text)}   ·   Dest → {Mode(DestBox.Text)}";
     }
 
-    private void OnBrowseSource(object sender, RoutedEventArgs e) => BrowseInto(SourceBox);
-    private void OnBrowseDest(object sender, RoutedEventArgs e) => BrowseInto(DestBox);
+    private void OnBrowseSource(object sender, RoutedEventArgs e) => BrowseInto(_sourceKind, SourceBox);
+    private void OnBrowseDest(object sender, RoutedEventArgs e) => BrowseInto(_destKind, DestBox);
 
-    private static void BrowseInto(System.Windows.Controls.TextBox target)
+    /// <summary>Opens the browser that fits the selected kind. This is the reason the type selector
+    /// is a selector and not a guess: a SharePoint location cannot be composed by hand reliably, and
+    /// a folder dialog cannot reach one at all.</summary>
+    private static void BrowseInto(LocationKind kind, System.Windows.Controls.TextBox target)
     {
+        if (kind == LocationKind.SharePoint)
+        {
+            BrowseCloudInto(target);
+            return;
+        }
+
         var dialog = new OpenFolderDialog { Title = "Select folder" };
         if (dialog.ShowDialog() == true)
             target.Text = dialog.FolderName;
+    }
+
+    private static void BrowseCloudInto(System.Windows.Controls.TextBox target)
+    {
+        try
+        {
+            if (CloudPickerWindow.Pick(AppServices.CreateCloudBrowser()) is { Length: > 0 } picked)
+                target.Text = picked;
+        }
+        catch (Exception ex)
+        {
+            // Browsing needs Graph configured and signed in. Failing here is informational: the path
+            // box is left exactly as it was, so nothing is lost by the attempt.
+            _ = Dialogs.InfoAsync("Cannot browse SharePoint", ex.Message);
+        }
     }
 
     private VerifyOptions BuildOptions() => new()
@@ -557,8 +752,8 @@ public partial class VerifyPage : Page
         NetworkCredential? srcCred, dstCred;
         try
         {
-            srcCred = ResolveCredential(SourceCredBox);
-            dstCred = ResolveCredential(DestCredBox);
+            srcCred = ResolveCredential(SourceCredBox, _sourceKind);
+            dstCred = ResolveCredential(DestCredBox, _destKind);
         }
         catch (Exception ex)
         {
@@ -630,8 +825,8 @@ public partial class VerifyPage : Page
         NetworkCredential? srcCred, dstCred;
         try
         {
-            srcCred = ResolveCredential(SourceCredBox);
-            dstCred = ResolveCredential(DestCredBox);
+            srcCred = ResolveCredential(SourceCredBox, _sourceKind);
+            dstCred = ResolveCredential(DestCredBox, _destKind);
         }
         catch (Exception ex) { StatusText.Text = $"Credential error: {ex.Message}"; return; }
 
@@ -765,6 +960,21 @@ public partial class VerifyPage : Page
             StatusText.Text = "Enter both a source and a destination path.";
             return false;
         }
+
+        // The type selector is a gate, not a hint. Running a path that contradicts its stated kind
+        // would produce an error about the wrong thing, so it is refused here -- which covers verify,
+        // preflight and reconcile alike, since they all come through this method.
+        if (LocationKinds.Mismatch(_sourceKind, src) is { } sourceProblem)
+        {
+            StatusText.Text = "Source: " + sourceProblem;
+            return false;
+        }
+        if (LocationKinds.Mismatch(_destKind, dst) is { } destProblem)
+        {
+            StatusText.Text = "Destination: " + destProblem;
+            return false;
+        }
+
         return true;
     }
 

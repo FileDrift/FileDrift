@@ -18,10 +18,16 @@
 
         <ui:TextBlock Grid.Row="0" Text="Verify" FontTypography="Subtitle" Margin="0,0,0,10" />
 
-        <!-- Paths + per-path credentials -->
+        <!-- Location type + paths + per-path credentials.
+
+             The type selector sits in FRONT of the path box deliberately. It states what kind of
+             location this is instead of inferring it from the text: that makes the intent explicit,
+             decides which Browse dialog opens, and turns a mistyped SharePoint URL into a named
+             mismatch rather than a filesystem error about a path that does not exist. -->
         <Grid Grid.Row="1" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="78" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -29,25 +35,37 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <ui:TextBlock Grid.Row="0" Grid.Column="0" Text="Source" VerticalAlignment="Center"
                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            <ui:TextBox x:Name="SourceBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,6"
+            <ComboBox x:Name="SourceKindBox" Grid.Row="0" Grid.Column="1" Width="172" Margin="0,0,8,6"
+                      ToolTip="What kind of location this is. Decides which Browse dialog opens and which paths are valid."
+                      SelectionChanged="OnSourceKindChanged" />
+            <ui:TextBox x:Name="SourceBox" Grid.Row="0" Grid.Column="2" Margin="0,0,8,6"
                         PlaceholderText="\\server\share or D:\data" TextChanged="OnSourceChanged" />
-            <ComboBox x:Name="SourceCredBox" Grid.Row="0" Grid.Column="2" Width="150" Margin="0,0,8,6"
+            <ComboBox x:Name="SourceCredBox" Grid.Row="0" Grid.Column="3" Width="150" Margin="0,0,8,6"
                       ToolTip="Credential to authenticate the source share" SelectionChanged="OnCredentialChanged" />
-            <ui:Button Grid.Row="0" Grid.Column="3" Content="Browse" Margin="0,0,0,6"
+            <ui:Button x:Name="SourceBrowseButton" Grid.Row="0" Grid.Column="4" Content="Browse" Margin="0,0,0,6"
                        Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseSource" />
 
             <ui:TextBlock Grid.Row="1" Grid.Column="0" Text="Destination" VerticalAlignment="Center"
                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            <ui:TextBox x:Name="DestBox" Grid.Row="1" Grid.Column="1" Margin="0,0,8,0"
+            <ComboBox x:Name="DestKindBox" Grid.Row="1" Grid.Column="1" Width="172" Margin="0,0,8,0"
+                      ToolTip="What kind of location this is. Decides which Browse dialog opens and which paths are valid."
+                      SelectionChanged="OnDestKindChanged" />
+            <ui:TextBox x:Name="DestBox" Grid.Row="1" Grid.Column="2" Margin="0,0,8,0"
                         PlaceholderText="\\server2\share2 or E:\backup" TextChanged="OnDestChanged" />
-            <ComboBox x:Name="DestCredBox" Grid.Row="1" Grid.Column="2" Width="150" Margin="0,0,8,0"
+            <ComboBox x:Name="DestCredBox" Grid.Row="1" Grid.Column="3" Width="150" Margin="0,0,8,0"
                       ToolTip="Credential to authenticate the destination share" SelectionChanged="OnCredentialChanged" />
-            <ui:Button Grid.Row="1" Grid.Column="3" Content="Browse"
+            <ui:Button x:Name="DestBrowseButton" Grid.Row="1" Grid.Column="4" Content="Browse"
                        Icon="{ui:SymbolIcon FolderOpen24}" Click="OnBrowseDest" />
+
+            <!-- Names a path that disagrees with its selected type, so the mistake is reported as
+                 itself instead of surfacing later as an error about something else. -->
+            <ui:InfoBar x:Name="KindMismatchBar" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5"
+                        Severity="Warning" IsClosable="False" IsOpen="False" Margin="0,8,0,0" />
         </Grid>
 
         <!-- Options -->

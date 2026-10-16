@@ -107,6 +107,9 @@ public static class GraphSites
 
     /// <summary>Lists the immediate children of a path within a drive. An empty or null
     /// <paramref name="itemPath"/> lists the drive root.</summary>
+    /// <remarks>Follows <c>@odata.nextLink</c> to completion. A folder with more children than the
+    /// page size is ordinary in a document library, and a silently truncated listing would be worse
+    /// than a slow one -- a browser would simply not show the folder you wanted.</remarks>
     public static async Task<JsonArray> ListChildrenAsync(
         GraphClient client, string driveId, string? itemPath, CancellationToken cancellationToken = default)
     {
@@ -114,8 +117,25 @@ public static class GraphSites
             ? $"drives/{driveId}/root/children"
             : $"drives/{driveId}/root:/{EncodePath(itemPath)}:/children";
 
-        var page = await client.GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
-        return page["value"]?.AsArray() ?? [];
+        var all = new JsonArray();
+        while (true)
+        {
+            var page = await client.GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+            if (page["value"]?.AsArray() is { } items)
+            {
+                // Detach each node before re-parenting it: a JsonNode belongs to one parent.
+                foreach (var item in items.ToArray())
+                {
+                    items.Remove(item);
+                    all.Add(item);
+                }
+            }
+
+            if (page["@odata.nextLink"]?.GetValue<string>() is not { Length: > 0 } next) break;
+            url = next;
+        }
+
+        return all;
     }
 
     /// <summary>Fetches a single item by path within a drive.</summary>
